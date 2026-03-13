@@ -106,7 +106,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install backend
-        run: pip install -r backend/requirements.txt
+        run: pip install -r backend/requirements.txt httpx
 
       - name: Download frontend build
         uses: actions/download-artifact@v4
