@@ -2,7 +2,6 @@ from typing import List, Dict, Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.classifiers.base import ClassifierConfigError
 from app.models.models import (

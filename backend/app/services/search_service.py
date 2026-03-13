@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func, select, literal_column, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Conversation, Run, RunClassification, Turn
+from app.models.models import Conversation, RunClassification, Turn
 from app.services.analytics_service import _classification_query
 
 

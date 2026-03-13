@@ -233,8 +233,6 @@ class ContextCascadingClassifier(CascadingClassifier):
         Returns:
             {conversation_id: [(label, confidence, explanation), ...]}
         """
-        results: Dict[int, List[Tuple[str, float, str]]] = {}
-
         if self.use_previous_labels:
             # Mode B: sequential within conversation, parallel across
             return self._classify_mode_b(conversations, taxonomy_categories)

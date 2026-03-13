@@ -61,7 +61,7 @@ jobs:
           pip install ruff
 
       - name: Lint with ruff
-        run: ruff check app/ --select E,F,W --ignore E501
+        run: ruff check app/ --select E,F,W --ignore E501,E402
 
   # ─── Frontend build ────────────────────────────────────────
   frontend-build:

@@ -12,7 +12,6 @@ from app.schemas.schemas import (
     ConversationRead,
     DatasetRead,
     FilterOptionsResponse,
-    TurnDetail,
     TurnSearchResponse,
 )
 from app.services.dataset_service import ingest_dataset

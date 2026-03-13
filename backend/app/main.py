@@ -39,7 +39,6 @@ _logger = logging.getLogger(__name__)
 
 async def _migrate_taxonomy_columns(conn):
     """Add new taxonomy/category columns to existing tables (safe, idempotent)."""
-    import sqlite3
 
     def _sync_migrate(connection):
         raw = connection.connection.dbapi_connection
