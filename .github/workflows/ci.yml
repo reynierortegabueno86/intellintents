@@ -119,23 +119,26 @@ jobs:
           cd backend
           timeout 15 python -c "
           import asyncio
+          from contextlib import asynccontextmanager
           from app.main import app
           from httpx import AsyncClient, ASGITransport
 
           async def check():
-              transport = ASGITransport(app=app)
-              async with AsyncClient(transport=transport, base_url='http://test') as client:
-                  # API root
-                  r = await client.get('/')
-                  assert r.status_code == 200, f'API root failed: {r.status_code}'
-                  # API datasets endpoint
-                  r = await client.get('/api/datasets')
-                  assert r.status_code == 200, f'Datasets failed: {r.status_code}'
-                  # SPA index.html
-                  r = await client.get('/some-frontend-route')
-                  assert r.status_code == 200, f'SPA failed: {r.status_code}'
-                  assert 'html' in r.headers.get('content-type', '').lower()
-                  print('All integration checks passed')
+              # Trigger lifespan to create DB tables
+              async with asynccontextmanager(app.router.lifespan_context)(app):
+                  transport = ASGITransport(app=app)
+                  async with AsyncClient(transport=transport, base_url='http://test') as client:
+                      # API root
+                      r = await client.get('/')
+                      assert r.status_code == 200, f'API root failed: {r.status_code}'
+                      # API datasets endpoint
+                      r = await client.get('/api/datasets')
+                      assert r.status_code == 200, f'Datasets failed: {r.status_code}'
+                      # SPA index.html
+                      r = await client.get('/some-frontend-route')
+                      assert r.status_code == 200, f'SPA failed: {r.status_code}'
+                      assert 'html' in r.headers.get('content-type', '').lower()
+                      print('All integration checks passed')
 
           asyncio.run(check())
           " || exit 1
