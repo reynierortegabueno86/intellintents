@@ -1,0 +1,188 @@
+{
+  "name": "(FII)-Financial Investment Intents",
+  "description": "Two-level intent taxonomy for financial investment assistant. 14 top-level categories with 84 sub-intents. Supports bilingual EN/ES classification. Includes conversational meta-intents (greetings, small talk, out-of-scope, harmful content) and an explicit UNKNOWN fallback.",
+  "categories": [
+    {
+      "name": "ONBOARDING_KYC",
+      "description": "Utterances where the user's primary goal is to become a client or activate their ability to invest by opening an account, verifying identity, uploading documents, checking eligibility, or linking a bank account.",
+      "color": "#4A90D9",
+      "children": [
+        {"name": "open_account", "description": "The user wants to initiate or continue the process of creating a new investment or brokerage account.", "color": "#6BA3E3"},
+        {"name": "verify_identity", "description": "The user wants to understand or complete identity verification requirements (KYC) such as submitting a passport or national ID.", "color": "#8BB7ED"},
+        {"name": "upload_document", "description": "The user wants to submit, resubmit, or check the handling of supporting documents such as proof of address, tax forms, or bank statements.", "color": "#ABCBF7"},
+        {"name": "check_eligibility", "description": "The user wants to know whether they meet prerequisites to open an account or access a specific product.", "color": "#C5DAFA"},
+        {"name": "age_limit", "description": "The user asks about age-related restrictions that affect their ability to open, operate, or manage an account.", "color": "#DEEAFD"},
+        {"name": "link_bank_account", "description": "The user wants to connect, register, or verify an external bank account for the purpose of funding or receiving withdrawals.", "color": "#5B9FE6"}
+      ]
+    },
+    {
+      "name": "INVESTOR_PROFILING",
+      "description": "Utterances where the user's primary goal is to provide, update, or refuse personal and financial information that shapes their investor profile.",
+      "color": "#50B86C",
+      "children": [
+        {"name": "state_risk_tolerance", "description": "The user communicates or wants to adjust their willingness and capacity to accept investment risk.", "color": "#6CC685"},
+        {"name": "state_investment_goal", "description": "The user describes or updates their high-level financial objectives such as capital growth, retirement, or income generation.", "color": "#88D49E"},
+        {"name": "state_investment_horizon", "description": "The user specifies or updates the time frame over which they plan to hold investments before needing the money.", "color": "#A4E2B7"},
+        {"name": "state_financial_situation", "description": "The user provides or updates information about their financial position, such as income, savings, or debts.", "color": "#C0F0D0"},
+        {"name": "state_experience_level", "description": "The user describes or updates their prior knowledge, familiarity, and experience with financial products.", "color": "#D8F7E3"},
+        {"name": "state_esg_preference", "description": "The user expresses or modifies preferences regarding Environmental, Social, and Governance (ESG) criteria.", "color": "#5EC27A"},
+        {"name": "update_risk_profile", "description": "The user explicitly wants to review or change their existing risk profile or investor classification.", "color": "#74CE90"},
+        {"name": "refuse_to_answer_profiling", "description": "The user declines or partially refuses to provide required personal or financial information for profiling.", "color": "#8ADAA6"}
+      ]
+    },
+    {
+      "name": "PRODUCT_DISCOVERY",
+      "description": "Utterances where the user's primary goal is to explore, understand, compare, or filter the universe of available financial products.",
+      "color": "#E8913A",
+      "children": [
+        {"name": "explore_product_types", "description": "The user wants an overview of the different categories of financial products available (funds, ETFs, bonds, stocks).", "color": "#EDA55E"},
+        {"name": "compare_products", "description": "The user wants to compare two or more specific products on key attributes.", "color": "#F2B982"},
+        {"name": "ask_product_features", "description": "The user asks about detailed characteristics of a specific product such as fees, minimum investment, or asset allocation.", "color": "#F7CDA6"},
+        {"name": "ask_product_risk", "description": "The user asks about the risk level, volatility, or capital protection of a specific product.", "color": "#FCE1CA"},
+        {"name": "ask_product_performance", "description": "The user asks about historical, recent, or scenario-based performance of a specific product.", "color": "#FEF0E4"},
+        {"name": "ask_product_eligibility", "description": "The user asks whether they personally are allowed or able to invest in a specific product.", "color": "#EB9B4E"},
+        {"name": "filter_by_criteria", "description": "The user wants to search, screen, or filter products based on explicit criteria like sector, geography, return, or fee level.", "color": "#EFA562"},
+        {"name": "ask_esg_classification", "description": "The user asks about the ESG rating, classification, labels, or sustainability characteristics of a product.", "color": "#F3AF76"}
+      ]
+    },
+    {
+      "name": "RECOMMENDATION_ADVISORY",
+      "description": "Utterances where the user's primary goal is to receive, understand, accept, reject, or adjust personalized investment recommendations.",
+      "color": "#D94F4F",
+      "children": [
+        {"name": "request_recommendation", "description": "The user asks the assistant to suggest specific investments or product combinations based on their profile.", "color": "#E17272"},
+        {"name": "request_portfolio_suggestion", "description": "The user asks for a proposed portfolio structure or model portfolio.", "color": "#E99595"},
+        {"name": "ask_why_recommended", "description": "The user wants an explanation of the rationale behind a specific recommendation.", "color": "#F1B8B8"},
+        {"name": "request_alternative", "description": "The user asks to see different options or variations to a current recommendation.", "color": "#F9DBDB"},
+        {"name": "accept_recommendation", "description": "The user explicitly agrees with a recommendation or advisory proposal.", "color": "#FCEDED"},
+        {"name": "reject_recommendation", "description": "The user explicitly disagrees with or declines to follow a recommendation.", "color": "#DE6060"},
+        {"name": "request_human_advisor", "description": "The user wants to escalate the advisory interaction to a human financial advisor.", "color": "#E48484"},
+        {"name": "request_rebalance_advice", "description": "The user asks for guidance on how to adjust or rebalance their existing portfolio.", "color": "#EBA7A7"}
+      ]
+    },
+    {
+      "name": "EXECUTION_TRANSACTIONS",
+      "description": "Utterances where the user's primary goal is to perform, modify, or check concrete money or securities transactions.",
+      "color": "#9B59B6",
+      "children": [
+        {"name": "buy_investment", "description": "The user wants to place or modify an order to purchase a specific financial product.", "color": "#AF7AC5"},
+        {"name": "sell_investment", "description": "The user wants to place or modify an order to sell all or part of an existing holding.", "color": "#C39BD3"},
+        {"name": "set_recurring_investment", "description": "The user wants to set up or adjust a periodic automatic investment plan.", "color": "#D7BCE2"},
+        {"name": "cancel_order", "description": "The user wants to cancel or attempt to cancel a pending or scheduled investment order.", "color": "#EBDEF0"},
+        {"name": "check_order_status", "description": "The user wants to know the current processing state of a previously submitted order.", "color": "#F4ECF7"},
+        {"name": "transfer_funds", "description": "The user wants to move money between accounts.", "color": "#A568BE"},
+        {"name": "withdraw_funds", "description": "The user wants to take money out of the investment environment to their bank account.", "color": "#B78ACC"}
+      ]
+    },
+    {
+      "name": "PORTFOLIO_MONITORING",
+      "description": "Utterances where the user's primary goal is to observe, review, or document the state and evolution of their portfolio.",
+      "color": "#1ABC9C",
+      "children": [
+        {"name": "check_portfolio_value", "description": "The user wants to know the current overall value of their portfolio.", "color": "#48C9AD"},
+        {"name": "check_holdings", "description": "The user wants to see the individual positions or assets they currently hold.", "color": "#76D7BE"},
+        {"name": "check_performance", "description": "The user wants to review how their portfolio or specific holdings have performed over time.", "color": "#A3E4CF"},
+        {"name": "check_gains_losses", "description": "The user wants to see realized or unrealized gains and losses.", "color": "#D1F2E0"},
+        {"name": "set_alert", "description": "The user wants to configure or review alerts or notifications for price changes or thresholds.", "color": "#E8F8F0"},
+        {"name": "request_statement", "description": "The user wants to obtain or download a formal account or portfolio statement.", "color": "#30C5A6"},
+        {"name": "ask_dividend_info", "description": "The user asks about dividend payments, schedules, yields, or reinvestment options.", "color": "#5CD1B5"}
+      ]
+    },
+    {
+      "name": "FINANCIAL_EDUCATION",
+      "description": "Utterances where the user's primary goal is to learn or understand general financial concepts, instruments, risk, strategies, market events, regulations, or tax implications.",
+      "color": "#F39C12",
+      "children": [
+        {"name": "explain_concept", "description": "The user asks for a plain-language explanation of a general financial or investment concept.", "color": "#F5B041"},
+        {"name": "explain_instrument", "description": "The user wants to understand the characteristics and typical use cases of a specific financial instrument.", "color": "#F7C470"},
+        {"name": "explain_risk", "description": "The user asks about how risk works in investing, including volatility, drawdown, or systematic risk.", "color": "#F9D89F"},
+        {"name": "explain_strategy", "description": "The user wants to learn about investment or portfolio strategies.", "color": "#FBECCE"},
+        {"name": "explain_market_event", "description": "The user asks about a particular market event, trend, or economic development.", "color": "#FDF5E6"},
+        {"name": "explain_regulation", "description": "The user asks about financial regulations, investor protection frameworks, or supervisory bodies.", "color": "#F4A62A"},
+        {"name": "explain_tax_implications", "description": "The user asks about how taxation applies to investments, capital gains, or dividends.", "color": "#F6B54E"}
+      ]
+    },
+    {
+      "name": "ACCOUNT_SERVICE_MANAGEMENT",
+      "description": "Utterances where the user's primary goal is to manage the ongoing service relationship or operational aspects of their account.",
+      "color": "#E74C8B",
+      "children": [
+        {"name": "change_personal_details", "description": "The user wants to update personal data such as name, address, email, or phone number.", "color": "#EC6FA3"},
+        {"name": "change_password", "description": "The user wants to reset, change, or recover their account password.", "color": "#F192BB"},
+        {"name": "ask_about_fees", "description": "The user asks about fees and charges at the platform or service level.", "color": "#F6B5D3"},
+        {"name": "file_complaint", "description": "The user wants to submit a formal complaint about the platform, service, or experience.", "color": "#FBD8EB"},
+        {"name": "escalate_to_human", "description": "The user wants to be connected to a human support agent for operational issues.", "color": "#FDECF5"},
+        {"name": "terminate_account", "description": "The user wants to close, deactivate, or fully terminate their account.", "color": "#EA5D97"},
+        {"name": "ask_service_hours", "description": "The user asks about the platform's operational schedule or customer support availability.", "color": "#EE80AD"},
+        {"name": "ask_security", "description": "The user asks about security-related aspects of the platform such as authentication or data protection.", "color": "#F2A3C3"}
+      ]
+    },
+    {
+      "name": "REGULATORY_COMPLIANCE",
+      "description": "Utterances where the user's primary goal is to exercise or understand legal and regulatory rights or obligations.",
+      "color": "#34696D",
+      "children": [
+        {"name": "request_risk_disclaimer", "description": "The user wants to see or receive formal risk warnings or disclaimers associated with investing.", "color": "#4D8387"},
+        {"name": "request_data_access", "description": "The user wants to access, export, or receive a copy of their personal data (e.g., GDPR SAR).", "color": "#669DA1"},
+        {"name": "request_data_deletion", "description": "The user wants their personal data to be deleted from the platform (right to be forgotten).", "color": "#80B7BB"},
+        {"name": "confirm_suitability", "description": "The user asks whether a product or recommendation is suitable given their profile and regulatory requirements.", "color": "#99D1D5"},
+        {"name": "ask_about_investor_protection", "description": "The user asks about investor protection mechanisms such as compensation funds or guarantees.", "color": "#B3EBEF"},
+        {"name": "ask_about_conflicts_of_interest", "description": "The user asks about potential conflicts of interest the platform or advisor may have.", "color": "#427578"},
+        {"name": "report_suspicious_activity", "description": "The user wants to report potentially fraudulent or suspicious activity on their account.", "color": "#578F93"}
+      ]
+    },
+    {
+      "name": "GREETING",
+      "description": "Utterances whose primary function is to manage the conversational channel by starting, ending, or maintaining the interaction through social rituals.",
+      "color": "#7FB3D8",
+      "children": [
+        {"name": "opening", "description": "The user's main purpose is to initiate or re-initiate the interaction or session (e.g., 'Hello', 'Good morning').", "color": "#99C4E0"},
+        {"name": "closing", "description": "The user's main purpose is to end or conclude the current interaction or session (e.g., 'Goodbye', 'Thanks, bye').", "color": "#B3D5E8"},
+        {"name": "phatic", "description": "The user's main purpose is to maintain or reinforce politeness and social connection (e.g., 'How are you?', 'Thank you').", "color": "#CCE6F0"}
+      ]
+    },
+    {
+      "name": "SMALL_TALK",
+      "description": "Utterances whose primary function is social, relational, or emotional, rather than to perform a financial task. Includes questions about the assistant itself, user feelings, and informal app feedback.",
+      "color": "#A8D8EA",
+      "children": [
+        {"name": "agent_identity", "description": "The user asks about or comments on what the assistant is, who made it, or what its capabilities are.", "color": "#B8E0EE"},
+        {"name": "agent_personality", "description": "The user comments on or inquires about the assistant's perceived personality, tone, or style.", "color": "#C8E8F2"},
+        {"name": "user_feelings", "description": "The user expresses emotions, attitudes, or psychological states about investing or the interaction.", "color": "#D8F0F6"},
+        {"name": "chitchat", "description": "The user engages in light, non-task-oriented conversation that does not target financial outcomes.", "color": "#E8F8FA"},
+        {"name": "app_feedback", "description": "The user shares informal, conversational feedback about the application or assistant experience.", "color": "#C0E4EF"}
+      ]
+    },
+    {
+      "name": "OUT_OF_SCOPE",
+      "description": "Utterances that request information or actions lying outside the financial investment assistant's supported domain, technical capabilities, or legal boundaries.",
+      "color": "#B0B0B0",
+      "children": [
+        {"name": "non_financial_topic", "description": "The user's main purpose is to obtain information or perform actions clearly outside the financial domain (e.g., weather, sports, recipes).", "color": "#C0C0C0"},
+        {"name": "unsupported_financial_domain", "description": "The user's request is financial but concerns products, services, or markets not supported by this platform.", "color": "#D0D0D0"},
+        {"name": "technical_capability_limit", "description": "The user asks for an outcome or functionality that exceeds the assistant's technical capabilities.", "color": "#E0E0E0"},
+        {"name": "legal_or_policy_restricted", "description": "The user requests guidance or actions that would violate regulatory, legal, or company policy boundaries.", "color": "#C8C8C8"},
+        {"name": "noise_unintelligible", "description": "The user input is so corrupted, incomplete, or ambiguous that no stable interpretation is possible.", "color": "#D8D8D8"}
+      ]
+    },
+    {
+      "name": "HARMFUL_UNETHICAL_COMMUNICATION",
+      "description": "Utterances whose primary function is to express abusive, hateful, or otherwise harmful content in language directed at individuals, groups, or the assistant.",
+      "color": "#8B0000",
+      "children": [
+        {"name": "harm_hate_lgbtiqphobia", "description": "The user conveys negative, hostile, or demeaning communication directed at LGBTIQ+ individuals or communities.", "color": "#A52A2A"},
+        {"name": "harm_hate_gender_based", "description": "The user conveys negative, hostile, or demeaning communication targeting individuals based on gender.", "color": "#B22222"},
+        {"name": "harm_hate_stereotypes_prejudice", "description": "The user promotes, endorses, or normalizes harmful stereotypes or prejudice based on race, ethnicity, religion, or other protected characteristics.", "color": "#CD5C5C"},
+        {"name": "harm_toxic_insults_general", "description": "The user insults, demeans, or aggressively attacks a person or entity without targeting a specific protected group.", "color": "#DC143C"}
+      ]
+    },
+    {
+      "name": "UNKNOWN",
+      "description": "Fallback category for utterances where none of the defined categories and subcategories can be confidently assigned.",
+      "color": "#808080",
+      "children": [
+        {"name": "none", "description": "The classifier cannot confidently map the utterance to any existing category or subcategory.", "color": "#999999"}
+      ]
+    }
+  ]
+}
