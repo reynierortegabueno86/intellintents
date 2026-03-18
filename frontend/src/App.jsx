@@ -40,7 +40,7 @@ function AnimatedRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/intellintents">
       <div className="flex min-h-screen animated-bg">
         <Sidebar />
         <main className="flex-1 min-h-screen overflow-y-auto">

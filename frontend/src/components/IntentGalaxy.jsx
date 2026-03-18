@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 import { getIntentColor } from '../utils/colors';
 import { formatCategoryName } from '../utils/formatCategoryName';
 
-export default function IntentGalaxy({ data }) {
+export default function IntentGalaxy({ data, height }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -13,7 +13,7 @@ export default function IntentGalaxy({ data }) {
 
     const container = containerRef.current;
     const width = container.clientWidth;
-    const height = container.clientHeight || 500;
+    const height = container.clientHeight || 400;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -165,7 +165,7 @@ export default function IntentGalaxy({ data }) {
   }, [data]);
 
   return (
-    <div ref={containerRef} className="relative w-full h-full min-h-[280px] bg-slate-950/50 rounded-xl overflow-hidden">
+    <div ref={containerRef} className="relative w-full bg-slate-950/50 rounded-xl overflow-hidden" style={{ height: height || 400 }}>
       <svg ref={svgRef} className="w-full h-full" />
       {tooltip && (
         <div

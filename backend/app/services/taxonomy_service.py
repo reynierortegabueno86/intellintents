@@ -317,7 +317,6 @@ async def move_category(
         # If new parent had examples, clear them (it's becoming non-leaf)
         await clear_examples_if_becomes_parent(db, new_parent_id)
 
-    old_parent_id = category.parent_id
     category.parent_id = new_parent_id
 
     # Bump taxonomy version

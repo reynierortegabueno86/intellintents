@@ -320,7 +320,7 @@ export default function Analytics() {
             <div className="glass-card p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">Intent Galaxy</h3>
               {galaxyData && galaxyData.nodes.length > 0 ? (
-                <IntentGalaxy data={galaxyData} />
+                <IntentGalaxy data={galaxyData} height={600} />
               ) : (
                 <div className="h-96 flex items-center justify-center text-slate-600 text-sm">
                   No transition data available

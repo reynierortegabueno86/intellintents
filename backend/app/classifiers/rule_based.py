@@ -1,4 +1,3 @@
-import re
 from typing import List, Tuple, Dict, Any
 
 from app.classifiers.base import BaseClassifier

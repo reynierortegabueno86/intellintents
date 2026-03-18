@@ -225,9 +225,7 @@ export default function Dashboard() {
           {isLoading ? (
             <Skeleton className="h-64" />
           ) : graphData && graphData.nodes.length > 0 ? (
-            <div className="h-[400px]">
-              <IntentGalaxy data={graphData} />
-            </div>
+            <IntentGalaxy data={graphData} height={400} />
           ) : (
             <div className="h-64 flex items-center justify-center text-slate-600 text-sm">
               No graph data available
