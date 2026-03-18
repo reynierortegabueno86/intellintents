@@ -114,10 +114,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount all routers under /api so they work both:
-# - In dev: Vite proxy rewrites /api/... -> /... (backend sees /api/datasets)
-# - In prod: frontend calls /api/... directly (same server)
-# We mount on BOTH /api and / for backward compatibility with dev proxy.
+# ---------------------------------------------------------------------------
+# Sub-application mounted at /intellintents
+# ---------------------------------------------------------------------------
+sub_app = FastAPI(title="IntelliIntents Sub-App")
+
 from fastapi import APIRouter as _APIRouter
 
 _api_router = _APIRouter(prefix="/api")
@@ -126,31 +127,7 @@ _api_router.include_router(taxonomy.router)
 _api_router.include_router(classification.router)
 _api_router.include_router(analytics.router)
 _api_router.include_router(experiments.router)
-app.include_router(_api_router)
-
-# Also mount without prefix so existing dev proxy (which strips /api) still works
-app.include_router(datasets.router)
-app.include_router(taxonomy.router)
-app.include_router(classification.router)
-app.include_router(analytics.router)
-app.include_router(experiments.router)
-
-
-@app.get("/")
-async def root():
-    return {
-        "name": "IntelliIntents API",
-        "version": "1.0.0",
-        "description": "Conversation Intelligence & Intent Analytics Platform",
-        "endpoints": {
-            "datasets": "/datasets",
-            "taxonomies": "/taxonomies",
-            "classification": "/classify",
-            "analytics": "/analytics",
-            "experiments": "/experiments",
-            "docs": "/docs",
-        },
-    }
+sub_app.include_router(_api_router)
 
 
 # ---------------------------------------------------------------------------
@@ -388,8 +365,7 @@ def _build_varied_conversation(rng: random.Random, idx: int) -> list:
     return conv
 
 
-@app.post("/api/seed-demo")
-@app.post("/seed-demo")
+@sub_app.post("/api/seed-demo")
 async def seed_demo(db: AsyncSession = Depends(get_db)):
     """Create demo taxonomy and dataset with ~50 conversations, then auto-classify."""
     # Check if demo data already exists
@@ -497,11 +473,11 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
 _FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 if _FRONTEND_DIST.is_dir():
-    # Serve static assets (JS, CSS, images)
-    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="static-assets")
+    # Serve static assets (JS, CSS, images) under the subpath
+    sub_app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="static-assets")
 
     # Catch-all: serve index.html for any non-API route (SPA client-side routing)
-    @app.get("/{full_path:path}")
+    @sub_app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         # If the file exists in dist, serve it (e.g. favicon, manifest)
         file_path = _FRONTEND_DIST / full_path
@@ -509,3 +485,14 @@ if _FRONTEND_DIST.is_dir():
             return FileResponse(file_path)
         # Otherwise serve index.html for client-side routing
         return FileResponse(_FRONTEND_DIST / "index.html")
+
+# Mount sub-app at /intellintents
+app.mount("/intellintents", sub_app)
+
+
+# Redirect root to /intellintents/
+from fastapi.responses import RedirectResponse
+
+@app.get("/")
+async def redirect_to_subpath():
+    return RedirectResponse(url="/intellintents/")

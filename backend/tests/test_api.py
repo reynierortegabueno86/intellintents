@@ -65,11 +65,10 @@ async def _upload_jsonl(client, name="JSONL DS"):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_root(client):
-    resp = await client.get("/")
+async def test_datasets_empty(client):
+    resp = await client.get("/datasets")
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["name"] == "IntelliIntents API"
+    assert resp.json() == []
 
 
 # ---------------------------------------------------------------------------
