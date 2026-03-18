@@ -130,14 +130,14 @@ jobs:
 
               transport = ASGITransport(app=app)
               async with AsyncClient(transport=transport, base_url='http://test') as client:
-                  # API root
+                  # Root redirects to /intellintents/
                   r = await client.get('/')
-                  assert r.status_code == 200, f'API root failed: {r.status_code}'
+                  assert r.status_code == 307, f'Root redirect failed: {r.status_code}'
                   # API datasets endpoint
-                  r = await client.get('/api/datasets')
+                  r = await client.get('/intellintents/api/datasets')
                   assert r.status_code == 200, f'Datasets failed: {r.status_code}'
                   # SPA index.html
-                  r = await client.get('/some-frontend-route')
+                  r = await client.get('/intellintents/some-frontend-route')
                   assert r.status_code == 200, f'SPA failed: {r.status_code}'
                   assert 'html' in r.headers.get('content-type', '').lower()
                   print('All integration checks passed')
