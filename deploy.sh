@@ -19,6 +19,9 @@ PORT="${1:-8001}"
 # Override: ALLOWED_FILE_PATHS="/data,/tmp" ./deploy.sh
 export ALLOWED_FILE_PATHS="${ALLOWED_FILE_PATHS:-$HOME,/tmp}"
 
+# Max file size in MB for uploads and source fetches (default: 2000 MB)
+export MAX_UPLOAD_MB="${MAX_UPLOAD_MB:-2000}"
+
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
