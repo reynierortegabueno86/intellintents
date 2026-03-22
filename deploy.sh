@@ -15,6 +15,10 @@ set -euo pipefail
 
 PORT="${1:-8001}"
 
+# Comma-separated list of directories the "Load from Source" feature may read from.
+# Override: ALLOWED_FILE_PATHS="/data,/tmp" ./deploy.sh
+export ALLOWED_FILE_PATHS="${ALLOWED_FILE_PATHS:-$HOME,/tmp}"
+
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
