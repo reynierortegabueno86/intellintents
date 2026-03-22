@@ -7,7 +7,12 @@ async function request(path, options = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
+    let message = text;
+    try {
+      const json = JSON.parse(text);
+      if (json.detail) message = json.detail;
+    } catch {}
+    throw new Error(message);
   }
   return res.json();
 }
@@ -27,6 +32,8 @@ export const uploadDataset = async (file, name, description) => {
   if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
   return res.json();
 };
+export const loadDatasetFromSource = (source, name, description) =>
+  request('/datasets/load-source', { method: 'POST', body: JSON.stringify({ source, name, description }) });
 export const getDataset = (id) => request(`/datasets/${id}`);
 export const getConversations = (datasetId) => request(`/datasets/${datasetId}/conversations`);
 export const getConversation = (datasetId, convId) => request(`/datasets/${datasetId}/conversations/${convId}`);
@@ -47,6 +54,8 @@ export const reorderCategories = (taxonomyId, categoryIds) => request(`/taxonomi
 export const setCategoryExamples = (taxonomyId, categoryId, examples) => request(`/taxonomies/${taxonomyId}/categories/${categoryId}/examples`, { method: 'PUT', body: JSON.stringify({ examples }) });
 export const clearCategoryExamples = (taxonomyId, categoryId) => request(`/taxonomies/${taxonomyId}/categories/${categoryId}/examples`, { method: 'DELETE' });
 export const importTaxonomy = (data) => request('/taxonomies/import', { method: 'POST', body: JSON.stringify(data) });
+export const importTaxonomyFromSource = (source) =>
+  request('/taxonomies/import-source', { method: 'POST', body: JSON.stringify({ source }) });
 export const exportTaxonomy = (id) => request(`/taxonomies/${id}/export`);
 
 // Classification

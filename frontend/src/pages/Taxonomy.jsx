@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Tags, Plus, Trash2, ChevronRight, ChevronDown, Palette, FolderTree,
   Upload, FileJson, AlertCircle, CheckCircle, Download, BookOpen,
-  Edit3, Save, X, ArrowRight, Hash,
+  Edit3, Save, X, ArrowRight, Hash, Link, Loader2,
 } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import * as api from '../utils/api';
@@ -375,6 +375,9 @@ export default function Taxonomy() {
   const [creating, setCreating] = useState(false);
 
   const [showImport, setShowImport] = useState(false);
+  const [importMode, setImportMode] = useState('file');
+  const [importSourceUrl, setImportSourceUrl] = useState('');
+  const [importSourceLoading, setImportSourceLoading] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importData, setImportData] = useState(null);
   const [importValidation, setImportValidation] = useState(null);
@@ -632,9 +635,37 @@ export default function Taxonomy() {
                 <h3 className="text-sm font-semibold text-white">Import Taxonomy from JSON</h3>
               </div>
 
-              <div className="text-xs text-slate-500 bg-slate-800/40 rounded-lg p-3 border border-slate-700/30 space-y-1">
-                <p className="font-medium text-slate-400">Expected JSON format:</p>
-                <pre className="text-[10px] text-slate-500 font-mono leading-relaxed">{`{
+              {/* Mode toggle */}
+              <div className="flex gap-1 bg-slate-800/60 rounded-lg p-1 inline-flex">
+                <button
+                  onClick={() => setImportMode('file')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    importMode === 'file'
+                      ? 'bg-violet-400/15 text-violet-400'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <Upload size={14} />
+                  Upload File
+                </button>
+                <button
+                  onClick={() => setImportMode('source')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    importMode === 'source'
+                      ? 'bg-violet-400/15 text-violet-400'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <Link size={14} />
+                  Load from Source
+                </button>
+              </div>
+
+              {importMode === 'file' ? (
+                <>
+                  <div className="text-xs text-slate-500 bg-slate-800/40 rounded-lg p-3 border border-slate-700/30 space-y-1">
+                    <p className="font-medium text-slate-400">Expected JSON format:</p>
+                    <pre className="text-[10px] text-slate-500 font-mono leading-relaxed">{`{
   "name": "My Taxonomy",
   "description": "Optional description",
   "tags": ["finance", "support"],
@@ -652,112 +683,156 @@ export default function Taxonomy() {
     }
   ]
 }`}</pre>
-                <p className="text-slate-600 mt-1">
-                  Required: <span className="text-slate-400">name</span>, <span className="text-slate-400">categories</span> (non-empty).
-                  Examples only allowed on leaf nodes. Unlimited nesting depth.
-                </p>
-              </div>
-
-              {/* File input */}
-              <div>
-                <label className="flex items-center gap-3 cursor-pointer bg-slate-800/60 border-2 border-dashed border-slate-700/50 hover:border-violet-400/40 rounded-lg p-4 transition-colors">
-                  <Upload size={20} className="text-slate-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    {importFile ? (
-                      <span className="text-sm text-slate-300">{importFile.name}</span>
-                    ) : (
-                      <span className="text-sm text-slate-500">Choose a .json file or drag and drop...</span>
-                    )}
+                    <p className="text-slate-600 mt-1">
+                      Required: <span className="text-slate-400">name</span>, <span className="text-slate-400">categories</span> (non-empty).
+                      Examples only allowed on leaf nodes. Unlimited nesting depth.
+                    </p>
                   </div>
+
+                  {/* File input */}
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer bg-slate-800/60 border-2 border-dashed border-slate-700/50 hover:border-violet-400/40 rounded-lg p-4 transition-colors">
+                      <Upload size={20} className="text-slate-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        {importFile ? (
+                          <span className="text-sm text-slate-300">{importFile.name}</span>
+                        ) : (
+                          <span className="text-sm text-slate-500">Choose a .json file or drag and drop...</span>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+                      {importFile && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); resetImport(); }}
+                          className="text-slate-500 hover:text-slate-300 text-xs"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* Validation results */}
+                  {importValidation && (
+                    <div className={`rounded-lg p-3 border text-sm space-y-2 ${
+                      importValidation.valid
+                        ? 'bg-emerald-400/5 border-emerald-400/20'
+                        : 'bg-red-400/5 border-red-400/20'
+                    }`}>
+                      {importValidation.valid ? (
+                        <div className="flex items-center gap-2 text-emerald-400">
+                          <CheckCircle size={16} />
+                          <span className="font-medium">Valid taxonomy</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-red-400">
+                          <AlertCircle size={16} />
+                          <span className="font-medium">Validation failed</span>
+                        </div>
+                      )}
+
+                      {importValidation.stats && (
+                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                          <span>Name: <span className="text-white">{importData?.name}</span></span>
+                          <span className="text-slate-700">|</span>
+                          <span>{importValidation.stats.categories} categories</span>
+                          <span className="text-slate-700">|</span>
+                          <span>{importValidation.stats.children} sub-intents</span>
+                          <span className="text-slate-700">|</span>
+                          <span>{importValidation.stats.total} total</span>
+                        </div>
+                      )}
+
+                      {importValidation.valid && importData?.categories?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {importData.categories.slice(0, 12).map((cat, i) => (
+                            <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                              {cat.name}
+                              {cat.children?.length > 0 && <span className="text-slate-600 ml-1">({cat.children.length})</span>}
+                            </span>
+                          ))}
+                          {importData.categories.length > 12 && (
+                            <span className="text-[10px] text-slate-600">+{importData.categories.length - 12} more</span>
+                          )}
+                        </div>
+                      )}
+
+                      {importValidation.errors.length > 0 && (
+                        <ul className="text-xs text-red-400/80 space-y-0.5 ml-6 list-disc">
+                          {importValidation.errors.slice(0, 10).map((err, i) => (
+                            <li key={i}>{err}</li>
+                          ))}
+                          {importValidation.errors.length > 10 && (
+                            <li className="text-slate-500">...and {importValidation.errors.length - 10} more errors</li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {importError && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-400/10 text-red-400 border border-red-400/20 text-xs">
+                      <AlertCircle size={14} />
+                      {importError}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleImport}
+                    disabled={importing || !importValidation?.valid}
+                    className="bg-violet-400/10 hover:bg-violet-400/20 text-violet-400 border border-violet-400/20 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    {importing ? 'Importing...' : 'Import Taxonomy'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-400">
+                    Load a taxonomy JSON from a URL (HTTP/HTTPS/FTP) or server file path
+                  </p>
                   <input
-                    type="file"
-                    accept=".json,application/json"
-                    onChange={handleFileSelect}
-                    className="hidden"
+                    placeholder="https://example.com/taxonomy.json or /path/to/taxonomy.json"
+                    value={importSourceUrl}
+                    onChange={(e) => setImportSourceUrl(e.target.value)}
+                    className="w-full bg-slate-800/80 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-violet-400/50"
                   />
-                  {importFile && (
-                    <button
-                      onClick={(e) => { e.preventDefault(); resetImport(); }}
-                      className="text-slate-500 hover:text-slate-300 text-xs"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </label>
-              </div>
 
-              {/* Validation results */}
-              {importValidation && (
-                <div className={`rounded-lg p-3 border text-sm space-y-2 ${
-                  importValidation.valid
-                    ? 'bg-emerald-400/5 border-emerald-400/20'
-                    : 'bg-red-400/5 border-red-400/20'
-                }`}>
-                  {importValidation.valid ? (
-                    <div className="flex items-center gap-2 text-emerald-400">
-                      <CheckCircle size={16} />
-                      <span className="font-medium">Valid taxonomy</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-red-400">
-                      <AlertCircle size={16} />
-                      <span className="font-medium">Validation failed</span>
+                  {importError && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-400/10 text-red-400 border border-red-400/20 text-xs">
+                      <AlertCircle size={14} />
+                      {importError}
                     </div>
                   )}
 
-                  {importValidation.stats && (
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                      <span>Name: <span className="text-white">{importData?.name}</span></span>
-                      <span className="text-slate-700">|</span>
-                      <span>{importValidation.stats.categories} categories</span>
-                      <span className="text-slate-700">|</span>
-                      <span>{importValidation.stats.children} sub-intents</span>
-                      <span className="text-slate-700">|</span>
-                      <span>{importValidation.stats.total} total</span>
-                    </div>
-                  )}
-
-                  {importValidation.valid && importData?.categories?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {importData.categories.slice(0, 12).map((cat, i) => (
-                        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/50">
-                          {cat.name}
-                          {cat.children?.length > 0 && <span className="text-slate-600 ml-1">({cat.children.length})</span>}
-                        </span>
-                      ))}
-                      {importData.categories.length > 12 && (
-                        <span className="text-[10px] text-slate-600">+{importData.categories.length - 12} more</span>
-                      )}
-                    </div>
-                  )}
-
-                  {importValidation.errors.length > 0 && (
-                    <ul className="text-xs text-red-400/80 space-y-0.5 ml-6 list-disc">
-                      {importValidation.errors.slice(0, 10).map((err, i) => (
-                        <li key={i}>{err}</li>
-                      ))}
-                      {importValidation.errors.length > 10 && (
-                        <li className="text-slate-500">...and {importValidation.errors.length - 10} more errors</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
+                  <button
+                    onClick={async () => {
+                      if (!importSourceUrl.trim()) return;
+                      setImportSourceLoading(true);
+                      setImportError(null);
+                      try {
+                        await api.importTaxonomyFromSource(importSourceUrl);
+                        setImportSourceUrl('');
+                        setShowImport(false);
+                        await reload();
+                      } catch (err) {
+                        setImportError(err.message);
+                      } finally {
+                        setImportSourceLoading(false);
+                      }
+                    }}
+                    disabled={importSourceLoading || !importSourceUrl.trim()}
+                    className="inline-flex items-center gap-2 bg-violet-400/10 hover:bg-violet-400/20 text-violet-400 border border-violet-400/20 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    {importSourceLoading ? <Loader2 size={16} className="animate-spin" /> : <Link size={16} />}
+                    {importSourceLoading ? 'Loading...' : 'Load & Import'}
+                  </button>
+                </>
               )}
-
-              {importError && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-400/10 text-red-400 border border-red-400/20 text-xs">
-                  <AlertCircle size={14} />
-                  {importError}
-                </div>
-              )}
-
-              <button
-                onClick={handleImport}
-                disabled={importing || !importValidation?.valid}
-                className="bg-violet-400/10 hover:bg-violet-400/20 text-violet-400 border border-violet-400/20 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                {importing ? 'Importing...' : 'Import Taxonomy'}
-              </button>
             </div>
           </motion.div>
         )}

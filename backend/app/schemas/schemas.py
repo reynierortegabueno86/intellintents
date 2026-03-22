@@ -16,6 +16,14 @@ def _validate_name(v: str) -> str:
     return v
 
 
+class DatasetLoadSource(BaseModel):
+    source: str  # URL or server path
+    name: str
+    description: Optional[str] = None
+
+    _check_name = field_validator("name")(_validate_name)
+
+
 class DatasetCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -246,6 +254,10 @@ class IntentTaxonomyDetail(IntentTaxonomyRead):
 # ---------------------------------------------------------------------------
 # Taxonomy JSON Import / Export
 # ---------------------------------------------------------------------------
+class TaxonomyImportSource(BaseModel):
+    source: str  # URL or server path
+
+
 class TaxonomyCategoryImport(BaseModel):
     """A category node in the import JSON. Supports unlimited nesting depth."""
     name: str

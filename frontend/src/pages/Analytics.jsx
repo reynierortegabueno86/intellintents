@@ -80,40 +80,61 @@ function buildHeatmapMatrix(rawHeatmap) {
   return { intents, turns: turnLabels, matrix };
 }
 
-// Build flow data from heatmap matrix
-function buildFlowFromHeatmap(hm) {
-  if (!hm) return null;
-  const { intents, turns, matrix } = hm;
-  const nodes = [];
-  const links = [];
+// Build flow data from real transition data + heatmap node counts
+function buildFlowFromTransitions(transitions, hm) {
+  if (!Array.isArray(transitions) || transitions.length === 0 || !hm) return null;
+  const { intents, matrix } = hm;
+  // turns in hm.turns are labels like "Turn 1", we need numeric indices
+  const numTurns = matrix[0]?.length || 0;
 
-  turns.forEach((turn, ti) => {
+  // Build nodes from heatmap (real counts per intent per turn)
+  const nodes = [];
+  for (let ti = 0; ti < numTurns; ti++) {
     intents.forEach((intent, ii) => {
       const val = matrix[ii]?.[ti] || 0;
       if (val > 0) {
         nodes.push({ id: intent, name: intent, layer: ti, count: val });
       }
     });
-  });
-
-  for (let ti = 0; ti < turns.length - 1; ti++) {
-    intents.forEach((srcIntent, si) => {
-      const srcVal = matrix[si]?.[ti] || 0;
-      if (srcVal === 0) return;
-      intents.forEach((tgtIntent, tgi) => {
-        const tgtVal = matrix[tgi]?.[ti + 1] || 0;
-        if (tgtVal > 0) {
-          links.push({
-            source: srcIntent,
-            target: tgtIntent,
-            source_layer: ti,
-            target_layer: ti + 1,
-            value: Math.min(srcVal, tgtVal),
-          });
-        }
-      });
-    });
   }
+
+  // Build links from actual transition data, replicated across consecutive turn pairs
+  // transitions = [{from_intent, to_intent, count, probability}]
+  const transMap = {};
+  for (const t of transitions) {
+    if (t.count > 0) {
+      transMap[`${t.from_intent}->${t.to_intent}`] = t;
+    }
+  }
+
+  const links = [];
+  for (let ti = 0; ti < numTurns - 1; ti++) {
+    // Get intents present at source and target turns
+    const srcIntents = intents.filter((_, ii) => (matrix[ii]?.[ti] || 0) > 0);
+    const tgtIntents = intents.filter((_, ii) => (matrix[ii]?.[ti + 1] || 0) > 0);
+
+    for (const src of srcIntents) {
+      const srcCount = matrix[intents.indexOf(src)]?.[ti] || 0;
+      for (const tgt of tgtIntents) {
+        const key = `${src}->${tgt}`;
+        const trans = transMap[key];
+        if (trans) {
+          // Scale the global transition probability by the source count at this turn
+          const value = Math.round(trans.probability * srcCount) || (src === tgt ? 1 : 0);
+          if (value > 0) {
+            links.push({
+              source: src,
+              target: tgt,
+              source_layer: ti,
+              target_layer: ti + 1,
+              value,
+            });
+          }
+        }
+      }
+    }
+  }
+
   return { nodes, links };
 }
 
@@ -185,7 +206,7 @@ export default function Analytics() {
 
   const galaxyData = useMemo(() => buildGalaxyFromTransitions(transitions), [transitions]);
   const heatmapData = useMemo(() => buildHeatmapMatrix(rawHeatmap), [rawHeatmap]);
-  const flowData = useMemo(() => buildFlowFromHeatmap(heatmapData), [heatmapData]);
+  const flowData = useMemo(() => buildFlowFromTransitions(transitions, heatmapData), [transitions, heatmapData]);
   const transTable = useMemo(() => buildTransitionMatrix(transitions), [transitions]);
 
   const intentLabels = useMemo(() =>
