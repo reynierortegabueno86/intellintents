@@ -72,13 +72,21 @@ def _filename_from_url(url: str, content_type: str | None = None) -> str:
 # Main fetch function
 # ---------------------------------------------------------------------------
 
+def _max_bytes_default() -> int:
+    """Read MAX_UPLOAD_MB env var (default 50) and convert to bytes."""
+    mb = int(os.environ.get("MAX_UPLOAD_MB", "50"))
+    return mb * 1024 * 1024
+
+
 async def fetch_source(
-    source: str, max_bytes: int = 50 * 1024 * 1024
+    source: str, max_bytes: int | None = None
 ) -> tuple[bytes, str]:
     """Fetch from HTTP/HTTPS/FTP URL or server file path.
 
     Returns (content_bytes, filename).
     """
+    if max_bytes is None:
+        max_bytes = _max_bytes_default()
     source = source.strip()
     if not source:
         raise SourceInvalidError("Source must not be empty")

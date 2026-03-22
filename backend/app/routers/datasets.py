@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -42,11 +43,12 @@ async def upload_dataset(
 
     content = await file.read()
 
-    MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
-    if len(content) > MAX_UPLOAD_SIZE:
+    max_mb = int(os.environ.get("MAX_UPLOAD_MB", "50"))
+    max_upload_size = max_mb * 1024 * 1024
+    if len(content) > max_upload_size:
         raise HTTPException(
             status_code=400,
-            detail=f"File too large ({len(content) / 1024 / 1024:.1f} MB). Maximum allowed size is 50 MB.",
+            detail=f"File too large ({len(content) / 1024 / 1024:.1f} MB). Maximum allowed is {max_mb} MB.",
         )
 
     try:
