@@ -18,6 +18,8 @@ class Dataset(Base):
     )
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)
     row_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="ready")
+    status_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     conversations: Mapped[List["Conversation"]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"

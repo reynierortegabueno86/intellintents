@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -15,7 +16,11 @@ from app.schemas.schemas import (
     FilterOptionsResponse,
     TurnSearchResponse,
 )
-from app.services.dataset_service import ingest_dataset, ingest_dataset_streaming
+from app.services.dataset_service import (
+    ingest_dataset,
+    create_dataset_placeholder,
+    ingest_dataset_background,
+)
 from app.services.search_service import get_filter_options, search_turns
 from app.services.source_fetcher import (
     SourceFetchError,
@@ -72,8 +77,13 @@ async def load_dataset_from_source(
     data: DatasetLoadSource,
     db: AsyncSession = Depends(get_db),
 ):
-    """Load a dataset from a URL or server file path."""
-    # ── Local files: stream from disk (no full-file memory load) ──
+    """Load a dataset from a URL or server file path.
+
+    For local files, ingestion runs in the background — the response returns
+    immediately with status='processing'. Poll GET /datasets/{id} to check
+    when status becomes 'ready' or 'failed'.
+    """
+    # ── Local files: validate path, create placeholder, background ingest ──
     if is_local_source(data.source):
         try:
             resolved = resolve_local_path(data.source)
@@ -87,13 +97,10 @@ async def load_dataset_from_source(
                 detail=f"Unsupported file type: '.{ext}'. Use CSV, JSON, or JSONL.",
             )
 
-        try:
-            dataset = await ingest_dataset_streaming(
-                db, data.name, data.description, resolved, ext
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
+        dataset = await create_dataset_placeholder(db, data.name, data.description, ext)
+        asyncio.create_task(
+            ingest_dataset_background(dataset.id, resolved, ext)
+        )
         return dataset
 
     # ── Remote URLs: fetch into memory then ingest ──

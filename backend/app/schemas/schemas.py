@@ -39,6 +39,8 @@ class DatasetRead(BaseModel):
     created_at: datetime.datetime
     file_type: str
     row_count: int
+    status: Optional[str] = "ready"
+    status_detail: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

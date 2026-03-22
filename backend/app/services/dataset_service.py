@@ -266,56 +266,157 @@ async def ingest_dataset(
     return dataset
 
 
-async def ingest_dataset_streaming(
+async def create_dataset_placeholder(
     db: AsyncSession,
     name: str,
     description: str | None,
-    file_path: Path,
     file_type: str,
-    batch_size: int = 500,
 ) -> Dataset:
-    """Stream-parse a large file from disk and persist to database in batches.
-
-    Only reads a few lines at a time — never loads the full file into memory.
-    Supports csv and jsonl. For json files, falls back to full-load.
-    """
-    if file_type == "json":
-        # JSON requires full parse (array structure). Fall back to in-memory.
-        content = file_path.read_text(encoding="utf-8")
-        return await ingest_dataset(db, name, description, content, file_type)
-
+    """Create a dataset row with status='processing'. Returns immediately."""
     dataset = Dataset(
         name=name,
         description=description,
         file_type=file_type,
         row_count=0,
+        status="processing",
+        status_detail="Starting ingestion...",
     )
     db.add(dataset)
-    await db.flush()
-
-    total_turns = 0
-    batch_count = 0
-
-    if file_type == "jsonl":
-        total_turns = await _stream_jsonl(db, dataset.id, file_path, batch_size)
-    elif file_type == "csv":
-        total_turns = await _stream_csv(db, dataset.id, file_path, batch_size)
-    else:
-        raise ValueError(f"Unsupported file type for streaming: {file_type}")
-
-    dataset.row_count = total_turns
     await db.commit()
     await db.refresh(dataset)
-    logger.info(f"Ingested dataset '{name}' ({total_turns} turns) from {file_path}")
     return dataset
 
 
-async def _stream_jsonl(
+async def ingest_dataset_background(
+    dataset_id: int,
+    file_path: Path,
+    file_type: str,
+    batch_size: int = 1000,
+) -> None:
+    """Background task: stream-parse a file and bulk-insert into the DB.
+
+    Uses its own DB session. Updates dataset status on completion/failure.
+    Uses raw SQL INSERT for performance — avoids ORM object tracking overhead.
+    """
+    from sqlalchemy import text
+    from app.database import get_session_factory
+
+    factory = get_session_factory()
+
+    try:
+        async with factory() as db:
+            if file_type == "json":
+                content = file_path.read_text(encoding="utf-8")
+                conversations_data = parse_json(content)
+                valid, msg = validate_schema(conversations_data)
+                if not valid:
+                    raise ValueError(f"Schema validation failed: {msg}")
+                total = await _bulk_insert_conversations(db, dataset_id, conversations_data, batch_size)
+            elif file_type == "jsonl":
+                total = await _stream_jsonl_bulk(db, dataset_id, file_path, batch_size)
+            elif file_type == "csv":
+                total = await _stream_csv_bulk(db, dataset_id, file_path, batch_size)
+            else:
+                raise ValueError(f"Unsupported file type: {file_type}")
+
+            await db.execute(
+                text("UPDATE datasets SET row_count = :cnt, status = 'ready', status_detail = NULL WHERE id = :id"),
+                {"cnt": total, "id": dataset_id},
+            )
+            await db.commit()
+            logger.info(f"Background ingest complete: dataset {dataset_id}, {total} turns")
+
+    except Exception as e:
+        logger.exception(f"Background ingest failed for dataset {dataset_id}")
+        try:
+            async with factory() as db:
+                detail = str(e)[:500]
+                await db.execute(
+                    text("UPDATE datasets SET status = 'failed', status_detail = :detail WHERE id = :id"),
+                    {"detail": detail, "id": dataset_id},
+                )
+                await db.commit()
+        except Exception:
+            logger.exception("Failed to update dataset status to 'failed'")
+
+
+async def _bulk_insert_conversations(
+    db: AsyncSession,
+    dataset_id: int,
+    conversations_data: List[Dict[str, Any]],
+    batch_size: int,
+) -> int:
+    """Insert parsed conversations using raw SQL bulk inserts."""
+    from sqlalchemy import text
+
+    total_turns = 0
+    turn_batch = []
+
+    for conv_data in conversations_data:
+        result = await db.execute(
+            text(
+                "INSERT INTO conversations (dataset_id, external_id, turn_count, created_at) "
+                "VALUES (:did, :eid, :tc, :ts)"
+            ),
+            {
+                "did": dataset_id,
+                "eid": conv_data.get("external_id"),
+                "tc": len(conv_data["turns"]),
+                "ts": datetime.datetime.utcnow().isoformat(),
+            },
+        )
+        conv_id = result.lastrowid
+
+        for turn_data in conv_data["turns"]:
+            ts = turn_data.get("timestamp")
+            if isinstance(ts, str) and ts:
+                try:
+                    ts = datetime.datetime.fromisoformat(ts).isoformat()
+                except (ValueError, TypeError):
+                    ts = None
+
+            turn_batch.append({
+                "cid": conv_id,
+                "ti": turn_data["turn_index"],
+                "sp": turn_data["speaker"],
+                "tx": turn_data["text"],
+                "ts": ts,
+                "thid": turn_data.get("thread_id"),
+                "gti": turn_data.get("ground_truth_intent"),
+            })
+            total_turns += 1
+
+            if len(turn_batch) >= batch_size:
+                await _flush_turn_batch(db, turn_batch)
+                turn_batch = []
+
+    if turn_batch:
+        await _flush_turn_batch(db, turn_batch)
+
+    return total_turns
+
+
+async def _flush_turn_batch(db: AsyncSession, batch: List[Dict]) -> None:
+    """Insert a batch of turns using executemany-style raw SQL."""
+    from sqlalchemy import text
+
+    await db.execute(
+        text(
+            "INSERT INTO turns (conversation_id, turn_index, speaker, text, timestamp, thread_id, ground_truth_intent) "
+            "VALUES (:cid, :ti, :sp, :tx, :ts, :thid, :gti)"
+        ),
+        batch,
+    )
+
+
+async def _stream_jsonl_bulk(
     db: AsyncSession, dataset_id: int, file_path: Path, batch_size: int
 ) -> int:
-    """Stream a JSONL file line-by-line and insert conversations in batches."""
+    """Stream JSONL line-by-line, bulk-insert turns in batches."""
+    from sqlalchemy import text
+
     total_turns = 0
-    pending_turns = 0
+    turn_batch = []
 
     with open(file_path, "r", encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
@@ -329,117 +430,137 @@ async def _stream_jsonl(
                 raise ValueError(f"Invalid JSON on line {line_num}: {e}")
 
             if not isinstance(conv, dict):
-                raise ValueError(f"Line {line_num}: expected a JSON object")
+                continue
 
             raw_turns = conv.get("turns", [])
             if not isinstance(raw_turns, list) or not raw_turns:
                 continue
 
             turns = [_normalize_turn(t, i) for i, t in enumerate(raw_turns)]
-
-            # Validate: skip conversations with empty turns
             valid_turns = [t for t in turns if t.get("text") and t.get("speaker")]
             if not valid_turns:
                 continue
 
             external_id = conv.get("conversation_id") or conv.get("external_id") or str(line_num)
 
-            conversation = Conversation(
-                dataset_id=dataset_id,
-                external_id=str(external_id),
-                turn_count=len(valid_turns),
+            result = await db.execute(
+                text(
+                    "INSERT INTO conversations (dataset_id, external_id, turn_count, created_at) "
+                    "VALUES (:did, :eid, :tc, :ts)"
+                ),
+                {
+                    "did": dataset_id,
+                    "eid": str(external_id),
+                    "tc": len(valid_turns),
+                    "ts": datetime.datetime.utcnow().isoformat(),
+                },
             )
-            db.add(conversation)
-            await db.flush()
+            conv_id = result.lastrowid
 
             for turn_data in valid_turns:
                 ts = turn_data.get("timestamp")
                 if isinstance(ts, str) and ts:
                     try:
-                        ts = datetime.datetime.fromisoformat(ts)
+                        ts = datetime.datetime.fromisoformat(ts).isoformat()
                     except (ValueError, TypeError):
                         ts = None
 
-                turn = Turn(
-                    conversation_id=conversation.id,
-                    turn_index=turn_data["turn_index"],
-                    speaker=turn_data["speaker"],
-                    text=turn_data["text"],
-                    timestamp=ts,
-                    thread_id=turn_data.get("thread_id"),
-                    ground_truth_intent=turn_data.get("ground_truth_intent"),
-                )
-                db.add(turn)
+                turn_batch.append({
+                    "cid": conv_id,
+                    "ti": turn_data["turn_index"],
+                    "sp": turn_data["speaker"],
+                    "tx": turn_data["text"],
+                    "ts": ts,
+                    "thid": turn_data.get("thread_id"),
+                    "gti": turn_data.get("ground_truth_intent"),
+                })
+                total_turns += 1
 
-            total_turns += len(valid_turns)
-            pending_turns += len(valid_turns)
+            if len(turn_batch) >= batch_size:
+                await _flush_turn_batch(db, turn_batch)
+                turn_batch = []
+                # Commit periodically to avoid huge transaction
+                if total_turns % (batch_size * 10) == 0:
+                    await db.commit()
+                    logger.info(f"  ...ingested {total_turns} turns so far")
 
-            # Flush in batches to limit memory
-            if pending_turns >= batch_size:
-                await db.flush()
-                pending_turns = 0
+    if turn_batch:
+        await _flush_turn_batch(db, turn_batch)
 
-    if pending_turns > 0:
-        await db.flush()
-
+    await db.commit()
     return total_turns
 
 
-async def _stream_csv(
+async def _stream_csv_bulk(
     db: AsyncSession, dataset_id: int, file_path: Path, batch_size: int
 ) -> int:
-    """Stream a CSV file and insert turns in batches."""
+    """Stream CSV row-by-row, bulk-insert turns in batches."""
+    from sqlalchemy import text
+
     total_turns = 0
-    pending_turns = 0
-    conversations: Dict[str, Conversation] = {}
+    turn_batch = []
+    conv_ids: Dict[str, int] = {}
+    conv_counts: Dict[str, int] = {}
 
     with open(file_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            conv_id = row.get("conversation_id", row.get("external_id", "default"))
+            conv_ext_id = row.get("conversation_id", row.get("external_id", "default"))
             turn_data = _normalize_turn(row, 0)
 
             if not turn_data.get("text") or not turn_data.get("speaker"):
                 continue
 
-            if conv_id not in conversations:
-                conversation = Conversation(
-                    dataset_id=dataset_id,
-                    external_id=conv_id,
-                    turn_count=0,
+            if conv_ext_id not in conv_ids:
+                result = await db.execute(
+                    text(
+                        "INSERT INTO conversations (dataset_id, external_id, turn_count, created_at) "
+                        "VALUES (:did, :eid, :tc, :ts)"
+                    ),
+                    {
+                        "did": dataset_id,
+                        "eid": conv_ext_id,
+                        "tc": 0,
+                        "ts": datetime.datetime.utcnow().isoformat(),
+                    },
                 )
-                db.add(conversation)
-                await db.flush()
-                conversations[conv_id] = conversation
-
-            conv = conversations[conv_id]
-            conv.turn_count += 1
+                conv_ids[conv_ext_id] = result.lastrowid
+                conv_counts[conv_ext_id] = 0
 
             ts = turn_data.get("timestamp")
             if isinstance(ts, str) and ts:
                 try:
-                    ts = datetime.datetime.fromisoformat(ts)
+                    ts = datetime.datetime.fromisoformat(ts).isoformat()
                 except (ValueError, TypeError):
                     ts = None
 
-            turn = Turn(
-                conversation_id=conv.id,
-                turn_index=turn_data["turn_index"],
-                speaker=turn_data["speaker"],
-                text=turn_data["text"],
-                timestamp=ts,
-                thread_id=turn_data.get("thread_id"),
-                ground_truth_intent=turn_data.get("ground_truth_intent"),
-            )
-            db.add(turn)
+            turn_batch.append({
+                "cid": conv_ids[conv_ext_id],
+                "ti": turn_data["turn_index"],
+                "sp": turn_data["speaker"],
+                "tx": turn_data["text"],
+                "ts": ts,
+                "thid": turn_data.get("thread_id"),
+                "gti": turn_data.get("ground_truth_intent"),
+            })
+            conv_counts[conv_ext_id] += 1
             total_turns += 1
-            pending_turns += 1
 
-            if pending_turns >= batch_size:
-                await db.flush()
-                pending_turns = 0
+            if len(turn_batch) >= batch_size:
+                await _flush_turn_batch(db, turn_batch)
+                turn_batch = []
+                if total_turns % (batch_size * 10) == 0:
+                    await db.commit()
 
-    if pending_turns > 0:
-        await db.flush()
+    if turn_batch:
+        await _flush_turn_batch(db, turn_batch)
 
+    # Update turn counts
+    for ext_id, count in conv_counts.items():
+        await db.execute(
+            text("UPDATE conversations SET turn_count = :tc WHERE id = :id"),
+            {"tc": count, "id": conv_ids[ext_id]},
+        )
+
+    await db.commit()
     return total_turns

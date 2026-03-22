@@ -212,11 +212,26 @@ export default function Datasets() {
                 if (!sourceUrl.trim() || !uploadName.trim()) return;
                 setSourceLoading(true);
                 try {
-                  await api.loadDatasetFromSource(sourceUrl, uploadName, uploadDesc);
+                  const ds = await api.loadDatasetFromSource(sourceUrl, uploadName, uploadDesc);
                   setSourceUrl('');
                   setUploadName('');
                   setUploadDesc('');
                   await reload();
+                  // If processing in background, poll until ready
+                  if (ds.status === 'processing') {
+                    const poll = setInterval(async () => {
+                      try {
+                        const updated = await api.getDataset(ds.id);
+                        if (updated.status === 'ready' || updated.status === 'failed') {
+                          clearInterval(poll);
+                          await reload();
+                          if (updated.status === 'failed') {
+                            alert('Ingestion failed: ' + (updated.status_detail || 'Unknown error'));
+                          }
+                        }
+                      } catch { clearInterval(poll); }
+                    }, 3000);
+                  }
                 } catch (err) {
                   alert('Load failed: ' + err.message);
                 } finally {
@@ -265,11 +280,22 @@ export default function Datasets() {
               </div>
               <h3 className="text-sm font-semibold text-white mb-1">{ds.name}</h3>
               {ds.description && <p className="text-xs text-slate-500 mb-2 line-clamp-2">{ds.description}</p>}
-              <div className="flex gap-3 text-xs text-slate-500">
-                {ds.row_count != null && <span>{ds.row_count} rows</span>}
-                {ds.conversation_count != null && <span>{ds.conversation_count} conversations</span>}
-                {ds.created_at && <span>{new Date(ds.created_at).toLocaleDateString()}</span>}
-              </div>
+              {ds.status === 'processing' ? (
+                <div className="flex items-center gap-2 text-xs text-amber-400">
+                  <Loader2 size={12} className="animate-spin" />
+                  Processing... large files may take a few minutes
+                </div>
+              ) : ds.status === 'failed' ? (
+                <div className="text-xs text-red-400">
+                  Failed: {ds.status_detail || 'Unknown error'}
+                </div>
+              ) : (
+                <div className="flex gap-3 text-xs text-slate-500">
+                  {ds.row_count != null && <span>{ds.row_count} rows</span>}
+                  {ds.conversation_count != null && <span>{ds.conversation_count} conversations</span>}
+                  {ds.created_at && <span>{new Date(ds.created_at).toLocaleDateString()}</span>}
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
