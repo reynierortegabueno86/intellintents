@@ -10,12 +10,14 @@ from app.models.models import Conversation, Dataset, Experiment, Run, Turn
 from app.schemas.schemas import (
     ConversationDetail,
     ConversationRead,
+    DatasetLoadSource,
     DatasetRead,
     FilterOptionsResponse,
     TurnSearchResponse,
 )
 from app.services.dataset_service import ingest_dataset
 from app.services.search_service import get_filter_options, search_turns
+from app.services.source_fetcher import SourceFetchError, fetch_source
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -54,6 +56,38 @@ async def upload_dataset(
 
     try:
         dataset = await ingest_dataset(db, name, description, file_content, ext)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return dataset
+
+
+@router.post("/load-source", response_model=DatasetRead)
+async def load_dataset_from_source(
+    data: DatasetLoadSource,
+    db: AsyncSession = Depends(get_db),
+):
+    """Load a dataset from a URL or server file path."""
+    try:
+        content_bytes, filename = await fetch_source(data.source)
+    except SourceFetchError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ("csv", "json", "jsonl"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot determine file type from '{filename}'. "
+            "URL must point to a .csv, .json, or .jsonl file.",
+        )
+
+    try:
+        file_content = content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded.")
+
+    try:
+        dataset = await ingest_dataset(db, data.name, data.description, file_content, ext)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

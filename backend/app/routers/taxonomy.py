@@ -2,6 +2,7 @@ import json
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,7 +22,9 @@ from app.schemas.schemas import (
     IntentTaxonomyUpdate,
     TaxonomyExport,
     TaxonomyImport,
+    TaxonomyImportSource,
 )
+from app.services.source_fetcher import SourceFetchError, fetch_source
 from app.services.taxonomy_service import (
     clear_examples_if_becomes_parent,
     export_taxonomy,
@@ -124,6 +127,55 @@ async def delete_taxonomy(taxonomy_id: int, db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # Import / Export
 # ---------------------------------------------------------------------------
+
+@router.post("/import-source", response_model=IntentTaxonomyDetail)
+async def import_taxonomy_from_source(
+    data: TaxonomyImportSource,
+    db: AsyncSession = Depends(get_db),
+):
+    """Import a taxonomy from a URL or server file path (JSON only)."""
+    try:
+        content_bytes, filename = await fetch_source(data.source)
+    except SourceFetchError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext != "json":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot determine file type from '{filename}'. "
+            "Taxonomy import requires a .json file (or a URL that serves application/json).",
+        )
+
+    try:
+        text = content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded.")
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
+
+    try:
+        model = TaxonomyImport(**parsed)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=f"Validation error: {e}")
+
+    try:
+        taxonomy = await import_taxonomy(db, model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
+
+    result = await db.execute(
+        select(IntentTaxonomy)
+        .options(selectinload(IntentTaxonomy.categories))
+        .where(IntentTaxonomy.id == taxonomy.id)
+    )
+    return result.scalar_one()
+
 
 @router.post("/import", response_model=IntentTaxonomyDetail)
 async def import_taxonomy_json(
