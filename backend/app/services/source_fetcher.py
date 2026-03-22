@@ -174,30 +174,26 @@ async def _fetch_ftp(url: str, max_bytes: int) -> tuple[bytes, str]:
     return data, filename
 
 
-def _default_allowed_paths() -> str:
-    """Return sensible default allowed directories: home dir + /tmp."""
-    home = Path.home()
-    return f"{home},{os.sep}tmp"
-
-
 async def _fetch_local(path_str: str, max_bytes: int) -> tuple[bytes, str]:
     allowed_env = os.environ.get("ALLOWED_FILE_PATHS", "").strip()
-    if not allowed_env:
-        allowed_env = _default_allowed_paths()
 
-    allowed_dirs = [
-        Path(d.strip()).resolve() for d in allowed_env.split(",") if d.strip()
-    ]
-    resolved = Path(path_str).resolve()
+    # If ALLOWED_FILE_PATHS is set, enforce it; otherwise allow any readable path.
+    if allowed_env:
+        allowed_dirs = [
+            Path(d.strip()).resolve() for d in allowed_env.split(",") if d.strip()
+        ]
+        resolved = Path(path_str).resolve()
 
-    if not any(
-        resolved == allowed or resolved.is_relative_to(allowed)
-        for allowed in allowed_dirs
-    ):
-        raise SourcePathNotAllowedError(
-            f"Path '{path_str}' is not under any allowed directory. "
-            f"Allowed: {', '.join(str(d) for d in allowed_dirs)}"
-        )
+        if not any(
+            resolved == allowed or resolved.is_relative_to(allowed)
+            for allowed in allowed_dirs
+        ):
+            raise SourcePathNotAllowedError(
+                f"Path '{path_str}' is not under any allowed directory. "
+                f"Allowed: {', '.join(str(d) for d in allowed_dirs)}"
+            )
+    else:
+        resolved = Path(path_str).resolve()
 
     if not resolved.is_file():
         raise SourceNotFoundError(f"File not found: {path_str}")
