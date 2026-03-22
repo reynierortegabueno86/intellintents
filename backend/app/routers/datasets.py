@@ -15,9 +15,14 @@ from app.schemas.schemas import (
     FilterOptionsResponse,
     TurnSearchResponse,
 )
-from app.services.dataset_service import ingest_dataset
+from app.services.dataset_service import ingest_dataset, ingest_dataset_streaming
 from app.services.search_service import get_filter_options, search_turns
-from app.services.source_fetcher import SourceFetchError, fetch_source
+from app.services.source_fetcher import (
+    SourceFetchError,
+    fetch_source,
+    is_local_source,
+    resolve_local_path,
+)
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -68,6 +73,30 @@ async def load_dataset_from_source(
     db: AsyncSession = Depends(get_db),
 ):
     """Load a dataset from a URL or server file path."""
+    # ── Local files: stream from disk (no full-file memory load) ──
+    if is_local_source(data.source):
+        try:
+            resolved = resolve_local_path(data.source)
+        except SourceFetchError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        ext = resolved.suffix.lstrip(".").lower()
+        if ext not in ("csv", "json", "jsonl"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: '.{ext}'. Use CSV, JSON, or JSONL.",
+            )
+
+        try:
+            dataset = await ingest_dataset_streaming(
+                db, data.name, data.description, resolved, ext
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        return dataset
+
+    # ── Remote URLs: fetch into memory then ingest ──
     try:
         content_bytes, filename = await fetch_source(data.source)
     except SourceFetchError as e:

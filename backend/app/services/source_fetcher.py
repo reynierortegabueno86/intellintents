@@ -177,6 +177,52 @@ async def _fetch_ftp(url: str, max_bytes: int) -> tuple[bytes, str]:
     return data, filename
 
 
+def resolve_local_path(source: str) -> Path:
+    """Validate and resolve a local file path (or file:// URL).
+
+    Returns the resolved Path. Raises SourceFetchError subclasses on failure.
+    Does NOT read the file — caller can stream it.
+    """
+    source = source.strip()
+    parsed = urlparse(source)
+    scheme = parsed.scheme.lower()
+
+    if scheme == "file":
+        path_str = f"/{parsed.netloc}{parsed.path}" if parsed.netloc else parsed.path
+    elif scheme == "":
+        path_str = source
+    else:
+        raise SourceInvalidError(f"resolve_local_path only handles local/file paths, got: {scheme}")
+
+    allowed_env = os.environ.get("ALLOWED_FILE_PATHS", "").strip()
+    if allowed_env:
+        allowed_dirs = [
+            Path(d.strip()).resolve() for d in allowed_env.split(",") if d.strip()
+        ]
+        resolved = Path(path_str).resolve()
+        if not any(
+            resolved == allowed or resolved.is_relative_to(allowed)
+            for allowed in allowed_dirs
+        ):
+            raise SourcePathNotAllowedError(
+                f"Path '{path_str}' is not under any allowed directory. "
+                f"Allowed: {', '.join(str(d) for d in allowed_dirs)}"
+            )
+    else:
+        resolved = Path(path_str).resolve()
+
+    if not resolved.is_file():
+        raise SourceNotFoundError(f"File not found: {path_str}")
+
+    return resolved
+
+
+def is_local_source(source: str) -> bool:
+    """Return True if the source is a local path or file:// URL."""
+    scheme = urlparse(source.strip()).scheme.lower()
+    return scheme in ("", "file")
+
+
 async def _fetch_local(path_str: str, max_bytes: int) -> tuple[bytes, str]:
     allowed_env = os.environ.get("ALLOWED_FILE_PATHS", "").strip()
 
