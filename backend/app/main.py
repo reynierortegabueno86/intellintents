@@ -72,6 +72,29 @@ async def _migrate_taxonomy_columns(conn):
     await conn.run_sync(_sync_migrate)
 
 
+async def _migrate_dataset_columns(conn):
+    """Add status/status_detail columns to datasets table (safe, idempotent)."""
+
+    def _sync_migrate(connection):
+        raw = connection.connection.dbapi_connection
+        cur = raw.cursor()
+
+        def _has_column(table, column):
+            cur.execute(f"PRAGMA table_info({table})")
+            return any(row[1] == column for row in cur.fetchall())
+
+        for col, ddl in [
+            ("status", "VARCHAR(20) DEFAULT 'ready'"),
+            ("status_detail", "TEXT"),
+        ]:
+            if not _has_column("datasets", col):
+                cur.execute(f"ALTER TABLE datasets ADD COLUMN {col} {ddl}")
+
+        raw.commit()
+
+    await conn.run_sync(_sync_migrate)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -80,6 +103,19 @@ async def lifespan(app: FastAPI):
     # Migrate existing tables to add new columns
     async with engine.begin() as conn:
         await _migrate_taxonomy_columns(conn)
+        await _migrate_dataset_columns(conn)
+
+    # Clean up orphaned "processing" datasets from a previous crash
+    from app.database import async_session as _as
+    async with _as() as db:
+        from sqlalchemy import update as _upd
+        r = await db.execute(
+            _upd(Dataset).where(Dataset.status == "processing")
+            .values(status="failed", status_detail="Server restarted during ingestion")
+        )
+        if r.rowcount > 0:
+            await db.commit()
+            _logger.info("Marked %d orphaned dataset(s) as failed on startup", r.rowcount)
 
     # Clean up orphaned runs (stuck as "running" or "pending" from a previous crash)
     from app.database import async_session
