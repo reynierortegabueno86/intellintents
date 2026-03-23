@@ -533,6 +533,8 @@ export default function Experiments() {
   const [viewingRun, setViewingRun] = useState(null);
   const [runResults, setRunResults] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
+  const [resultsPage, setResultsPage] = useState(1);
+  const RESULTS_PAGE_SIZE = 20;
 
   const loadRuns = async (expId) => {
     setRunsLoading(true);
@@ -658,7 +660,7 @@ export default function Experiments() {
   const handleToggleFavorite = async (exp) => { await api.updateExperiment(exp.id, { is_favorite: !exp.is_favorite }); await reload(); };
   const handleViewRun = async (run) => {
     if (viewingRun?.id === run.id) { setViewingRun(null); setRunResults(null); return; }
-    setViewingRun(run); setResultsLoading(true);
+    setViewingRun(run); setResultsLoading(true); setResultsPage(1);
     try { setRunResults(await api.getRunResults(run.id)); } catch { setRunResults([]); }
     finally { setResultsLoading(false); }
   };
@@ -900,15 +902,45 @@ export default function Experiments() {
                       </div>
                     )}
 
-                    {/* Conversations */}
+                    {/* Conversations (paginated) */}
                     {resultsLoading ? (
                       <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
                     ) : runResults?.length > 0 ? (
-                      <div className="space-y-1.5">
-                        {runResults.map((conv, i) => (
-                          <RunConversationCard key={conv.conversation_id} conversation={conv} index={i} />
-                        ))}
-                      </div>
+                      <>
+                        <div className="space-y-1.5">
+                          {runResults
+                            .slice((resultsPage - 1) * RESULTS_PAGE_SIZE, resultsPage * RESULTS_PAGE_SIZE)
+                            .map((conv, i) => (
+                              <RunConversationCard key={conv.conversation_id} conversation={conv} index={i} />
+                            ))}
+                        </div>
+                        {runResults.length > RESULTS_PAGE_SIZE && (
+                          <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-800/50">
+                            <span className="text-[10px] text-slate-600">
+                              {(resultsPage - 1) * RESULTS_PAGE_SIZE + 1}–{Math.min(resultsPage * RESULTS_PAGE_SIZE, runResults.length)} of {runResults.length} conversations
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setResultsPage(p => Math.max(1, p - 1))}
+                                disabled={resultsPage === 1}
+                                className="px-2 py-1 text-[10px] rounded bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                Prev
+                              </button>
+                              <span className="text-[10px] text-slate-500 px-2">
+                                {resultsPage} / {Math.ceil(runResults.length / RESULTS_PAGE_SIZE)}
+                              </span>
+                              <button
+                                onClick={() => setResultsPage(p => Math.min(Math.ceil(runResults.length / RESULTS_PAGE_SIZE), p + 1))}
+                                disabled={resultsPage >= Math.ceil(runResults.length / RESULTS_PAGE_SIZE)}
+                                className="px-2 py-1 text-[10px] rounded bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="text-center py-4 text-slate-600 text-xs">No results</div>
                     )}
