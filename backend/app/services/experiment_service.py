@@ -244,14 +244,25 @@ async def run_experiment(db: AsyncSession, experiment_id: int) -> Run:
     return run
 
 
-async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> None:
-    """Core classification logic shared by sync and background execution."""
+async def _execute_run(
+    db: AsyncSession,
+    run_id: int,
+    experiment_id: int,
+    batch_size: int = 500,
+) -> None:
+    """Core classification logic shared by sync and background execution.
+
+    Processes turns in batches of ``batch_size`` to avoid loading the entire
+    dataset into memory at once.
+    """
     run = await db.get(Run, run_id)
     exp = await db.get(Experiment, experiment_id)
     if not run or not exp:
         return
 
     run.status = "running"
+    run.progress_current = 0
+    run.progress_total = 0
     await db.commit()
 
     params = json.loads(exp.classifier_parameters) if exp.classifier_parameters else None
@@ -271,14 +282,15 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
         )
         label_map = {m.classifier_label: m.taxonomy_label for m in mappings_result.scalars().all()}
 
-        # Load all turns
-        turns_result = await db.execute(
-            select(Turn)
+        # Count total turns for progress tracking
+        count_result = await db.execute(
+            select(func.count(Turn.id))
             .join(Conversation, Turn.conversation_id == Conversation.id)
             .where(Conversation.dataset_id == exp.dataset_id)
-            .order_by(Conversation.id, Turn.turn_index)
         )
-        turns = turns_result.scalars().all()
+        total_turns = count_result.scalar() or 0
+        run.progress_total = total_turns
+        await db.commit()
 
         # Build classifier
         try:
@@ -286,77 +298,110 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
         except ClassifierConfigError as e:
             raise ValueError(f"Classifier configuration error: {e}")
 
-        # Pre-flight check
-        if turns:
+        # Pre-flight check on first turn
+        preflight_result = await db.execute(
+            select(Turn)
+            .join(Conversation, Turn.conversation_id == Conversation.id)
+            .where(Conversation.dataset_id == exp.dataset_id)
+            .limit(1)
+        )
+        first_turn = preflight_result.scalar_one_or_none()
+        if first_turn:
             try:
-                classifier.classify_turn(turns[0].text, taxonomy_categories)
+                classifier.classify_turn(first_turn.text, taxonomy_categories)
             except ClassifierConfigError as e:
                 raise ValueError(f"Classifier configuration error: {e}")
 
-        # Classify all turns (run in thread to avoid blocking the event loop)
         loop = asyncio.get_event_loop()
+        use_conv_batch = hasattr(classifier, 'classify_conversation_batch')
 
-        if hasattr(classifier, 'classify_conversation_batch'):
-            conversations = _group_turns_by_conversation(turns)
-            conv_results = await loop.run_in_executor(
-                None, classifier.classify_conversation_batch,
-                conversations, taxonomy_categories,
-            )
-            # Build lookup: (conversation_id, turn_index) → result
-            result_lookup = {}
-            for conv_id, conv_result_list in conv_results.items():
-                conv_turns_info = conversations[conv_id]
-                for ti, res in zip(conv_turns_info, conv_result_list):
-                    result_lookup[(ti.conversation_id, ti.turn_index)] = res
-            results = [
-                result_lookup.get(
-                    (t.conversation_id, t.turn_index),
-                    ("UNKNOWN", 0.0, "Missing result"),
-                )
-                for t in turns
-            ]
-        else:
-            turn_texts = [t.text for t in turns]
-            results = await loop.run_in_executor(
-                None, classifier.classify_batch, turn_texts, taxonomy_categories
-            )
-
-        # Store classifications
         intent_counter: Counter = Counter()
         total_confidence = 0.0
+        processed = 0
+        conversation_ids = set()
 
-        for turn, (label, confidence, explanation) in zip(turns, results):
-            mapped_label = label_map.get(label, label)
-            rc = RunClassification(
-                run_id=run.id,
-                conversation_id=turn.conversation_id,
-                turn_id=turn.id,
-                speaker=turn.speaker,
-                text=turn.text,
-                intent_label=mapped_label,
-                confidence=confidence,
+        # Process turns in batches
+        offset = 0
+        while offset < total_turns:
+            # Load a batch of turns
+            batch_result = await db.execute(
+                select(Turn)
+                .join(Conversation, Turn.conversation_id == Conversation.id)
+                .where(Conversation.dataset_id == exp.dataset_id)
+                .order_by(Conversation.id, Turn.turn_index)
+                .offset(offset)
+                .limit(batch_size)
             )
-            db.add(rc)
-            intent_counter[mapped_label] += 1
-            total_confidence += confidence
+            batch_turns = batch_result.scalars().all()
+            if not batch_turns:
+                break
 
-        total_turns = len(turns)
+            # Classify the batch
+            if use_conv_batch:
+                conversations = _group_turns_by_conversation(batch_turns)
+                conv_results = await loop.run_in_executor(
+                    None, classifier.classify_conversation_batch,
+                    conversations, taxonomy_categories,
+                )
+                result_lookup = {}
+                for conv_id, conv_result_list in conv_results.items():
+                    conv_turns_info = conversations[conv_id]
+                    for ti, res in zip(conv_turns_info, conv_result_list):
+                        result_lookup[(ti.conversation_id, ti.turn_index)] = res
+                results = [
+                    result_lookup.get(
+                        (t.conversation_id, t.turn_index),
+                        ("UNKNOWN", 0.0, "Missing result"),
+                    )
+                    for t in batch_turns
+                ]
+            else:
+                batch_texts = [t.text for t in batch_turns]
+                results = await loop.run_in_executor(
+                    None, classifier.classify_batch, batch_texts, taxonomy_categories
+                )
+
+            # Store classifications for this batch
+            for turn, (label, confidence, _explanation) in zip(batch_turns, results):
+                mapped_label = label_map.get(label, label)
+                db.add(RunClassification(
+                    run_id=run.id,
+                    conversation_id=turn.conversation_id,
+                    turn_id=turn.id,
+                    speaker=turn.speaker,
+                    text=turn.text,
+                    intent_label=mapped_label,
+                    confidence=confidence,
+                ))
+                intent_counter[mapped_label] += 1
+                total_confidence += confidence
+                conversation_ids.add(turn.conversation_id)
+
+            processed += len(batch_turns)
+            offset += batch_size
+
+            # Update progress and commit batch
+            run.progress_current = processed
+            await db.commit()
+            logger.info("Run %d: classified %d / %d turns", run_id, processed, total_turns)
+
         fallback_count = sum(
             count for label, count in intent_counter.items()
             if is_fallback_label(label)
         )
 
         run.status = "completed"
+        run.progress_current = processed
         run.runtime_duration = round(time.time() - start_time, 3)
         summary = {
-            "total_turns": total_turns,
-            "total_conversations": len(set(t.conversation_id for t in turns)),
+            "total_turns": processed,
+            "total_conversations": len(conversation_ids),
             "unique_intents": len(intent_counter),
-            "avg_confidence": round(total_confidence / max(total_turns, 1), 4),
+            "avg_confidence": round(total_confidence / max(processed, 1), 4),
             "intent_distribution": dict(intent_counter.most_common()),
         }
 
-        if total_turns > 0 and fallback_count == total_turns:
+        if processed > 0 and fallback_count == processed:
             summary["warning"] = (
                 "All turns were classified as UNKNOWN/fallback. "
                 "This usually means the LLM API call is failing silently. "
