@@ -292,10 +292,6 @@ async def _execute_run(
         run.progress_total = total_turns
         await db.commit()
 
-        # Set total for progress tracking
-        run.progress_total = len(turns)
-        await db.commit()
-
         # Build classifier
         try:
             classifier = get_classifier(exp.classification_method, params)
