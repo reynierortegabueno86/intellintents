@@ -295,6 +295,23 @@ class CascadingClassifier(LLMBaseClassifier):
                 except Exception as e:
                     logger.error("Future failed: %s", str(e))
 
+        # Fill any None results from incomplete futures
+        for i, r in enumerate(results):
+            if r is None:
+                results[i] = ("UNKNOWN", 0.0, "Classification did not complete")
+
+        # Early abort: if first N results all failed, raise instead of silent all-UNKNOWN
+        check_count = min(10, total)
+        unknown_count = sum(1 for r in results[:check_count] if r[0] == "UNKNOWN")
+        if check_count > 0 and unknown_count == check_count:
+            errors = [r[2] for r in results[:check_count] if r[0] == "UNKNOWN" and r[2]]
+            last_err = errors[-1] if errors else "Unknown error"
+            raise ValueError(
+                f"All first {check_count} turns classified as UNKNOWN — aborting run. "
+                f"Last error: {last_err}. "
+                f"Check API key, model name, and network connectivity."
+            )
+
         logger.info("Batch classification complete: %d turns", total)
         return results
 

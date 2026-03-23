@@ -376,9 +376,44 @@ async def _execute_run(
             conversation_ids = {row[0] for row in existing_convs.all()}
             logger.info("Run %d: resuming from offset %d, %d existing classifications", run_id, initial_offset, sum(intent_counter.values()))
 
-        # Process turns in batches
-        offset = initial_offset
-        while offset < total_turns:
+        # Build conversation-aware batches so no conversation is split
+        conv_info_result = await db.execute(
+            select(Conversation.id, func.count(Turn.id))
+            .join(Turn)
+            .where(Conversation.dataset_id == exp.dataset_id)
+            .group_by(Conversation.id)
+            .order_by(Conversation.id)
+        )
+        conv_list = conv_info_result.all()  # [(conv_id, turn_count), ...]
+
+        conv_batches = []
+        current_batch_ids = []
+        current_batch_count = 0
+        for conv_id, turn_count in conv_list:
+            if current_batch_count + turn_count > batch_size and current_batch_ids:
+                conv_batches.append((current_batch_ids, current_batch_count))
+                current_batch_ids = []
+                current_batch_count = 0
+            current_batch_ids.append(conv_id)
+            current_batch_count += turn_count
+        if current_batch_ids:
+            conv_batches.append((current_batch_ids, current_batch_count))
+
+        # On resume: skip already-processed conversation batches
+        skip_turns = 0
+        start_batch_idx = 0
+        if initial_offset > 0:
+            for idx, (_ids, count) in enumerate(conv_batches):
+                if skip_turns + count <= initial_offset:
+                    skip_turns += count
+                    start_batch_idx = idx + 1
+                else:
+                    break
+
+        # Process conversation batches
+        for batch_idx in range(start_batch_idx, len(conv_batches)):
+            conv_id_list, _batch_turn_count = conv_batches[batch_idx]
+
             # Check pause signal before starting a new batch
             if pause_signal and pause_signal.is_set():
                 run.status = "paused"
@@ -387,14 +422,11 @@ async def _execute_run(
                 logger.info("Run %d: paused at %d / %d turns", run_id, processed, total_turns)
                 return
 
-            # Load a batch of turns
+            # Load all turns for this conversation batch (never splits a conversation)
             batch_result = await db.execute(
                 select(Turn)
-                .join(Conversation, Turn.conversation_id == Conversation.id)
-                .where(Conversation.dataset_id == exp.dataset_id)
-                .order_by(Conversation.id, Turn.turn_index)
-                .offset(offset)
-                .limit(batch_size)
+                .where(Turn.conversation_id.in_(conv_id_list))
+                .order_by(Turn.conversation_id, Turn.turn_index)
             )
             batch_turns = batch_result.scalars().all()
             if not batch_turns:
@@ -442,12 +474,11 @@ async def _execute_run(
                 conversation_ids.add(turn.conversation_id)
 
             processed += len(batch_turns)
-            offset += batch_size
 
             # Update progress and commit batch
             run.progress_current = processed
             await db.commit()
-            logger.info("Run %d: classified %d / %d turns", run_id, processed, total_turns)
+            logger.info("Run %d: classified %d / %d turns (%d conversations in batch)", run_id, processed, total_turns, len(conv_id_list))
 
         fallback_count = sum(
             count for label, count in intent_counter.items()

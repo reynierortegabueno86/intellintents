@@ -2,11 +2,37 @@ import json
 import logging
 import os
 import threading
+import time
 from typing import List, Tuple, Dict, Any, Optional
 
 from app.classifiers.base import BaseClassifier, ClassifierConfigError
 
 logger = logging.getLogger(__name__)
+
+# Retry configuration for transient API errors
+_MAX_RETRIES = 3
+_RETRY_DELAYS = [2, 5, 15]  # seconds
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Check if an exception is a transient error worth retrying."""
+    exc_type = type(exc).__name__
+    # OpenAI: RateLimitError, APITimeoutError, APIConnectionError, InternalServerError
+    # Anthropic: RateLimitError, APITimeoutError, APIConnectionError, InternalServerError
+    retryable_names = (
+        "RateLimitError", "APITimeoutError", "APIConnectionError",
+        "InternalServerError", "APIStatusError",
+    )
+    if exc_type in retryable_names:
+        return True
+    # Also retry on generic connection/timeout errors
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    # Retry on HTTP 429, 500, 502, 503, 529
+    status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    if status and int(status) in (429, 500, 502, 503, 529):
+        return True
+    return False
 
 
 class LLMBaseClassifier(BaseClassifier):
@@ -121,25 +147,40 @@ class LLMBaseClassifier(BaseClassifier):
 
         effective_model = model or self.model
 
-        kwargs = {
-            "model": effective_model,
-            "messages": messages,
-            "temperature": self.temperature,
-            "timeout": 60,
-        }
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                kwargs = {
+                    "model": effective_model,
+                    "messages": messages,
+                    "temperature": self.temperature,
+                    "timeout": 60,
+                }
+                try:
+                    kwargs["max_completion_tokens"] = self.max_tokens
+                    response = self._client.chat.completions.create(**kwargs)
+                except (openai.BadRequestError, TypeError):
+                    kwargs.pop("max_completion_tokens", None)
+                    kwargs["max_tokens"] = self.max_tokens
+                    response = self._client.chat.completions.create(**kwargs)
 
-        # Newer models (GPT-4o+, GPT-5.x) require max_completion_tokens
-        # instead of max_tokens.  Try max_completion_tokens first; if the
-        # SDK / model doesn't support it, fall back to max_tokens.
-        try:
-            kwargs["max_completion_tokens"] = self.max_tokens
-            response = self._client.chat.completions.create(**kwargs)
-        except (openai.BadRequestError, TypeError):
-            kwargs.pop("max_completion_tokens", None)
-            kwargs["max_tokens"] = self.max_tokens
-            response = self._client.chat.completions.create(**kwargs)
-
-        return response.choices[0].message.content.strip()
+                return response.choices[0].message.content.strip()
+            except ClassifierConfigError:
+                raise
+            except Exception as e:
+                if attempt < _MAX_RETRIES and _is_retryable(e):
+                    delay = _RETRY_DELAYS[attempt]
+                    logger.warning(
+                        "OpenAI API retry %d/%d [%s/%s] after %ds: %s: %s",
+                        attempt + 1, _MAX_RETRIES, self.provider, effective_model,
+                        delay, type(e).__name__, str(e),
+                    )
+                    time.sleep(delay)
+                    continue
+                logger.error(
+                    "OpenAI API call failed [%s/%s]: %s: %s",
+                    self.provider, effective_model, type(e).__name__, str(e),
+                )
+                raise
 
     def _call_anthropic(self, messages: List[Dict[str, str]], model: Optional[str] = None) -> str:
         try:
@@ -165,15 +206,34 @@ class LLMBaseClassifier(BaseClassifier):
             else:
                 chat_messages.append(msg)
 
-        response = self._client.messages.create(
-            model=model or self.model,
-            system=system_content,
-            messages=chat_messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            timeout=60,
-        )
-        return response.content[0].text.strip()
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                response = self._client.messages.create(
+                    model=model or self.model,
+                    system=system_content,
+                    messages=chat_messages,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    timeout=60,
+                )
+                return response.content[0].text.strip()
+            except ClassifierConfigError:
+                raise
+            except Exception as e:
+                if attempt < _MAX_RETRIES and _is_retryable(e):
+                    delay = _RETRY_DELAYS[attempt]
+                    logger.warning(
+                        "Anthropic API retry %d/%d [%s/%s] after %ds: %s: %s",
+                        attempt + 1, _MAX_RETRIES, self.provider, model or self.model,
+                        delay, type(e).__name__, str(e),
+                    )
+                    time.sleep(delay)
+                    continue
+                logger.error(
+                    "Anthropic API call failed [%s/%s]: %s: %s",
+                    self.provider, model or self.model, type(e).__name__, str(e),
+                )
+                raise
 
     def _call_llm(self, messages: List[Dict[str, str]], model: Optional[str] = None) -> str:
         from app.classifiers.llm_cache import get_cached, put_cached
