@@ -11,6 +11,8 @@ import * as api from '../utils/api';
 import IntentBadge from '../components/IntentBadge';
 import { SpeakerIntentLanes, IntentStrip } from '../components/IntentSequence';
 import { getIntentColor } from '../utils/colors';
+import { buildIntentHierarchy, groupDistributionByParent } from '../utils/intentHierarchy';
+import { formatCategoryName } from '../utils/formatCategoryName';
 
 function Skeleton({ className }) {
   return <div className={`skeleton ${className}`} />;
@@ -111,7 +113,7 @@ function Section({ title, icon: Icon, count, defaultOpen = false, actions, child
 }
 
 // ── Conversation card in run results ────────────────────────────
-function RunConversationCard({ conversation, index }) {
+function RunConversationCard({ conversation, index, intentHierarchy = {} }) {
   const [expanded, setExpanded] = useState(false);
   const turns = conversation.turns || [];
   const uniqueIntents = [...new Set(turns.map(t => t.intent_label))];
@@ -175,7 +177,7 @@ function RunConversationCard({ conversation, index }) {
                           <span className={`text-[10px] font-mono uppercase ${isUser ? 'text-cyan-400/70' : 'text-violet-400/70'}`}>
                             {turn.speaker}
                           </span>
-                          <IntentBadge label={turn.intent_label} size="xs" />
+                          <IntentBadge label={turn.intent_label} parentLabel={intentHierarchy[turn.intent_label]} size="xs" />
                           <span className="text-[9px] text-slate-600 font-mono">{(turn.confidence * 100).toFixed(0)}%</span>
                         </div>
                         <CollapsibleText text={turn.text} maxLength={140} />
@@ -533,6 +535,7 @@ export default function Experiments() {
   const [viewingRun, setViewingRun] = useState(null);
   const [runResults, setRunResults] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
+  const [intentHierarchy, setIntentHierarchy] = useState({});
 
   const loadRuns = async (expId) => {
     setRunsLoading(true);
@@ -658,8 +661,15 @@ export default function Experiments() {
   const handleToggleFavorite = async (exp) => { await api.updateExperiment(exp.id, { is_favorite: !exp.is_favorite }); await reload(); };
   const handleViewRun = async (run) => {
     if (viewingRun?.id === run.id) { setViewingRun(null); setRunResults(null); return; }
-    setViewingRun(run); setResultsLoading(true);
-    try { setRunResults(await api.getRunResults(run.id)); } catch { setRunResults([]); }
+    setViewingRun(run); setResultsLoading(true); setResultsPage(1);
+    try {
+      const [results, taxonomy] = await Promise.all([
+        api.getRunResults(run.id),
+        selectedExpDetail?.taxonomy_id ? api.getTaxonomy(selectedExpDetail.taxonomy_id) : null,
+      ]);
+      setRunResults(results);
+      setIntentHierarchy(taxonomy ? buildIntentHierarchy(taxonomy.categories || []) : {});
+    } catch { setRunResults([]); setIntentHierarchy({}); }
     finally { setResultsLoading(false); }
   };
   const handleDeleteRun = async (run) => {
@@ -889,16 +899,30 @@ export default function Experiments() {
                     )}
 
                     {/* Intent distribution legend */}
-                    {viewingRun.results_summary?.intent_distribution && (
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {Object.entries(viewingRun.results_summary.intent_distribution).map(([intent, count]) => (
-                          <div key={intent} className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getIntentColor(intent) }} />
-                            {intent}: {count}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {viewingRun.results_summary?.intent_distribution && (() => {
+                      const groups = groupDistributionByParent(viewingRun.results_summary.intent_distribution, intentHierarchy);
+                      return (
+                        <div className="space-y-1.5 mb-4">
+                          {groups.map(group => (
+                            <div key={group.parent}>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getIntentColor(group.parent) }} />
+                                {formatCategoryName(group.parent)}: {group.total}
+                              </div>
+                              {group.children.length > 0 && (
+                                <div className="ml-4 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                  {group.children.map(child => (
+                                    <span key={child.label} className="text-[10px] text-slate-500">
+                                      {formatCategoryName(child.label)}: {child.count}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {/* Conversations */}
                     {resultsLoading ? (
@@ -906,7 +930,7 @@ export default function Experiments() {
                     ) : runResults?.length > 0 ? (
                       <div className="space-y-1.5">
                         {runResults.map((conv, i) => (
-                          <RunConversationCard key={conv.conversation_id} conversation={conv} index={i} />
+                          <RunConversationCard key={conv.conversation_id} conversation={conv} index={i} intentHierarchy={intentHierarchy} />
                         ))}
                       </div>
                     ) : (
