@@ -308,11 +308,43 @@ async def update_dataset(
 
 @router.delete("/{dataset_id}")
 async def delete_dataset(dataset_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete a dataset and all associated data."""
+    """Delete a dataset and all associated data.
+
+    Uses raw SQL deletes to avoid lazy-loading cascades that can hit
+    'database is locked' errors when a background task holds a write lock.
+    """
+    from sqlalchemy import text
+
     dataset = await db.get(Dataset, dataset_id)
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    await db.delete(dataset)
+    # Delete in dependency order to respect FK constraints
+    # 1. Run classifications & label mappings (via experiments → runs)
+    await db.execute(text(
+        "DELETE FROM run_classifications WHERE run_id IN "
+        "(SELECT r.id FROM runs r JOIN experiments e ON r.experiment_id = e.id WHERE e.dataset_id = :did)"
+    ), {"did": dataset_id})
+    await db.execute(text(
+        "DELETE FROM runs WHERE experiment_id IN "
+        "(SELECT id FROM experiments WHERE dataset_id = :did)"
+    ), {"did": dataset_id})
+    await db.execute(text(
+        "DELETE FROM label_mappings WHERE experiment_id IN "
+        "(SELECT id FROM experiments WHERE dataset_id = :did)"
+    ), {"did": dataset_id})
+    await db.execute(text("DELETE FROM experiments WHERE dataset_id = :did"), {"did": dataset_id})
+    # 2. Classifications on turns
+    await db.execute(text(
+        "DELETE FROM classifications WHERE turn_id IN "
+        "(SELECT t.id FROM turns t JOIN conversations c ON t.conversation_id = c.id WHERE c.dataset_id = :did)"
+    ), {"did": dataset_id})
+    # 3. Turns, conversations, dataset
+    await db.execute(text(
+        "DELETE FROM turns WHERE conversation_id IN "
+        "(SELECT id FROM conversations WHERE dataset_id = :did)"
+    ), {"did": dataset_id})
+    await db.execute(text("DELETE FROM conversations WHERE dataset_id = :did"), {"did": dataset_id})
+    await db.execute(text("DELETE FROM datasets WHERE id = :did"), {"did": dataset_id})
     await db.commit()
     return {"detail": "Dataset deleted", "id": dataset_id}

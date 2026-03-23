@@ -1,9 +1,20 @@
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 DATABASE_URL = "sqlite+aiosqlite:///./intellintents.db"
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"timeout": 30})
+
+
+# Enable SQLite foreign key enforcement and WAL mode for concurrent reads
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.close()
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

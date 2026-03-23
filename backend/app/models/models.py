@@ -24,6 +24,10 @@ class Dataset(Base):
     conversations: Mapped[List["Conversation"]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"
     )
+    experiments: Mapped[List["Experiment"]] = relationship(
+        back_populates="dataset", cascade="all, delete-orphan",
+        foreign_keys="Experiment.dataset_id",
+    )
 
 
 class Conversation(Base):
@@ -149,7 +153,7 @@ class Experiment(Base):
     is_favorite: Mapped[bool] = mapped_column(Integer, default=False)  # SQLite boolean
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
-    dataset: Mapped["Dataset"] = relationship()
+    dataset: Mapped["Dataset"] = relationship(back_populates="experiments")
     taxonomy: Mapped["IntentTaxonomy"] = relationship()
     runs: Mapped[List["Run"]] = relationship(back_populates="experiment", cascade="all, delete-orphan")
     label_mappings: Mapped[List["LabelMapping"]] = relationship(back_populates="experiment", cascade="all, delete-orphan")
