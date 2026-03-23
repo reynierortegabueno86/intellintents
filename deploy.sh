@@ -64,7 +64,10 @@ echo "  Press Ctrl+C to stop"
 echo ""
 
 cd "$BACKEND_DIR"
+# Single worker is required: background tasks (asyncio.create_task) and
+# SQLite both need a single-process model.  Concurrency is handled by
+# asyncio within that one worker.
 BACKEND_PORT="$PORT" "$VENV_DIR/bin/python" -m uvicorn app.main:app \
   --host 0.0.0.0 \
   --port "$PORT" \
-  --workers 2
+  --workers 1
