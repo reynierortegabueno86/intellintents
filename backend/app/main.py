@@ -95,6 +95,29 @@ async def _migrate_dataset_columns(conn):
     await conn.run_sync(_sync_migrate)
 
 
+async def _migrate_run_columns(conn):
+    """Add progress columns to runs table (safe, idempotent)."""
+
+    def _sync_migrate(connection):
+        raw = connection.connection.dbapi_connection
+        cur = raw.cursor()
+
+        def _has_column(table, column):
+            cur.execute(f"PRAGMA table_info({table})")
+            return any(row[1] == column for row in cur.fetchall())
+
+        for col, ddl in [
+            ("progress_current", "INTEGER"),
+            ("progress_total", "INTEGER"),
+        ]:
+            if not _has_column("runs", col):
+                cur.execute(f"ALTER TABLE runs ADD COLUMN {col} {ddl}")
+
+        raw.commit()
+
+    await conn.run_sync(_sync_migrate)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -104,6 +127,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await _migrate_taxonomy_columns(conn)
         await _migrate_dataset_columns(conn)
+        await _migrate_run_columns(conn)
 
     # Clean up orphaned "processing" datasets from a previous crash
     from app.database import async_session as _as
