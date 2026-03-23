@@ -308,6 +308,12 @@ class ContextCascadingClassifier(CascadingClassifier):
                 conv_id, pos, result = item
                 results[conv_id][pos] = result
 
+        # Fill any None results from incomplete futures
+        for cid in results:
+            for i, r in enumerate(results[cid]):
+                if r is None:
+                    results[cid][i] = ("UNKNOWN", 0.0, "Classification did not complete")
+
         return results
 
     def _classify_mode_b(
