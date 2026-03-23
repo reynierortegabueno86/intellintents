@@ -594,10 +594,6 @@ export default function Experiments() {
             setRunProgress(null);
             if (selectedExp === expId) await loadRuns(expId);
             await reload();
-            if (status.status === 'failed') {
-              const errMsg = status.results_summary?.error || 'Unknown error';
-              alert('Run failed: ' + errMsg);
-            }
           }
         } catch {
           clearInterval(pollRef.current);
@@ -769,14 +765,19 @@ export default function Experiments() {
                       <span className="text-xs text-slate-400 font-mono">#{run.id}</span>
                       {run.execution_date && <span className="text-[10px] text-slate-500">{new Date(run.execution_date).toLocaleString()}</span>}
                       {run.runtime_duration != null && <span className="text-[10px] text-slate-600">{run.runtime_duration.toFixed(2)}s</span>}
-                      {run.results_summary && (
+                      {run.status === 'failed' && run.results_summary?.error ? (
+                        <div className="flex items-center gap-1.5 ml-auto text-[10px] text-red-400 max-w-[50%] truncate" title={run.results_summary.error}>
+                          <AlertCircle size={10} className="flex-shrink-0" />
+                          <span className="truncate">{run.results_summary.error}</span>
+                        </div>
+                      ) : run.results_summary && !run.results_summary.error ? (
                         <div className="flex items-center gap-3 ml-auto text-[10px] text-slate-500">
                           <span>{run.results_summary.total_conversations || 0} conv</span>
                           <span>{run.results_summary.total_turns || 0} turns</span>
                           <span>{run.results_summary.unique_intents || 0} intents</span>
                           <span>{((run.results_summary.avg_confidence || 0) * 100).toFixed(0)}%</span>
                         </div>
-                      )}
+                      ) : null}
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteRun(run); }} className="text-slate-700 hover:text-red-400 transition-colors">
                         <Trash2 size={11} />
                       </button>
@@ -795,8 +796,19 @@ export default function Experiments() {
                   <Section title={`Run #${viewingRun.id} Results`} icon={Eye} defaultOpen={true}
                     actions={<StatusBadge status={viewingRun.status} />}
                   >
+                    {/* Error detail for failed runs */}
+                    {viewingRun.status === 'failed' && viewingRun.results_summary?.error && (
+                      <div className="mb-4 px-3 py-2.5 rounded-lg bg-red-400/5 border border-red-400/20">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-red-400 mb-1">
+                          <AlertCircle size={12} />
+                          Run Failed
+                        </div>
+                        <pre className="text-[11px] text-red-300/80 whitespace-pre-wrap break-words font-mono leading-relaxed">{viewingRun.results_summary.error}</pre>
+                      </div>
+                    )}
+
                     {/* KPI row */}
-                    {viewingRun.results_summary && (
+                    {viewingRun.results_summary && !viewingRun.results_summary.error && (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                         {[
                           { label: 'Conversations', value: viewingRun.results_summary.total_conversations || 0 },
