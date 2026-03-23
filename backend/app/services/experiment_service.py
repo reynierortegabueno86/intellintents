@@ -252,6 +252,8 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
         return
 
     run.status = "running"
+    run.progress_current = 0
+    run.progress_total = 0
     await db.commit()
 
     params = json.loads(exp.classifier_parameters) if exp.classifier_parameters else None
@@ -279,6 +281,10 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
             .order_by(Conversation.id, Turn.turn_index)
         )
         turns = turns_result.scalars().all()
+
+        # Set total for progress tracking
+        run.progress_total = len(turns)
+        await db.commit()
 
         # Build classifier
         try:
@@ -324,8 +330,9 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
         # Store classifications
         intent_counter: Counter = Counter()
         total_confidence = 0.0
+        progress_batch = max(len(turns) // 20, 50)  # update ~20 times or every 50 turns
 
-        for turn, (label, confidence, explanation) in zip(turns, results):
+        for i, (turn, (label, confidence, explanation)) in enumerate(zip(turns, results)):
             mapped_label = label_map.get(label, label)
             rc = RunClassification(
                 run_id=run.id,
@@ -340,6 +347,11 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
             intent_counter[mapped_label] += 1
             total_confidence += confidence
 
+            # Update progress periodically
+            if (i + 1) % progress_batch == 0:
+                run.progress_current = i + 1
+                await db.commit()
+
         total_turns = len(turns)
         fallback_count = sum(
             count for label, count in intent_counter.items()
@@ -347,6 +359,7 @@ async def _execute_run(db: AsyncSession, run_id: int, experiment_id: int) -> Non
         )
 
         run.status = "completed"
+        run.progress_current = total_turns
         run.runtime_duration = round(time.time() - start_time, 3)
         summary = {
             "total_turns": total_turns,

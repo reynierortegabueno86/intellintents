@@ -186,6 +186,8 @@ def _run_to_dict(run: Run) -> dict:
         "runtime_duration": run.runtime_duration,
         "configuration_snapshot": config,
         "results_summary": summary,
+        "progress_current": run.progress_current,
+        "progress_total": run.progress_total,
         "is_favorite": bool(run.is_favorite),
         "created_at": run.created_at.isoformat() if run.created_at else None,
     }
