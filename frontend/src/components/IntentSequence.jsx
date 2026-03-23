@@ -65,7 +65,7 @@ export function IntentDotSequence({ intents, size = 8, gap = 2 }) {
  * Shows intent sequences per speaker as horizontal lane-style strips.
  * Each speaker gets a labeled row with colored intent dots.
  */
-export function SpeakerIntentLanes({ turns }) {
+export function SpeakerIntentLanes({ turns, intentHierarchy = {} }) {
   if (!turns || turns.length === 0) return null;
 
   // Group turns by speaker preserving order
@@ -95,7 +95,12 @@ export function SpeakerIntentLanes({ turns }) {
           </span>
           <div className="flex items-center gap-0.5">
             {intents.map((intent, i) => {
-              const color = getIntentColor(intent);
+              const colorKey = intentHierarchy[intent] || intent;
+              const color = getIntentColor(colorKey);
+              const parentName = intentHierarchy[intent];
+              const tooltip = parentName
+                ? `${formatCategoryName(parentName)}: ${formatCategoryName(intent)}`
+                : formatCategoryName(intent);
               return (
                 <motion.div
                   key={i}
@@ -111,7 +116,7 @@ export function SpeakerIntentLanes({ turns }) {
                   {/* Tooltip */}
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
                     <div className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-[10px] text-white whitespace-nowrap shadow-lg">
-                      {formatCategoryName(intent)}
+                      {tooltip}
                     </div>
                   </div>
                 </motion.div>
@@ -128,7 +133,7 @@ export function SpeakerIntentLanes({ turns }) {
  * Compact conversation summary strip: shows all intents as a continuous
  * gradient-like bar of colored segments.
  */
-export function IntentStrip({ turns, height = 6 }) {
+export function IntentStrip({ turns, height = 6, intentHierarchy = {} }) {
   if (!turns || turns.length === 0) return null;
 
   const segWidth = 100 / turns.length;
@@ -136,7 +141,12 @@ export function IntentStrip({ turns, height = 6 }) {
   return (
     <div className="flex w-full rounded-full overflow-hidden" style={{ height }}>
       {turns.map((t, i) => {
-        const color = getIntentColor(t.intent_label);
+        const colorKey = intentHierarchy[t.intent_label] || t.intent_label;
+        const color = getIntentColor(colorKey);
+        const parentName = intentHierarchy[t.intent_label];
+        const intentDisplay = parentName
+          ? `${formatCategoryName(parentName)}: ${formatCategoryName(t.intent_label)}`
+          : formatCategoryName(t.intent_label);
         return (
           <div
             key={i}
@@ -149,7 +159,7 @@ export function IntentStrip({ turns, height = 6 }) {
           >
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
               <div className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-[10px] text-white whitespace-nowrap shadow-lg">
-                <span className="font-medium">{t.speaker}</span>: {formatCategoryName(t.intent_label)}
+                <span className="font-medium">{t.speaker}</span>: {intentDisplay}
               </div>
             </div>
           </div>

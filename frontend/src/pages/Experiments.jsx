@@ -144,7 +144,7 @@ function RunConversationCard({ conversation, index, intentHierarchy = {} }) {
           <Sparkles size={9} />{(avgConf * 100).toFixed(0)}%
         </span>
         <div className="flex-1 min-w-0 mx-2">
-          <IntentStrip turns={turns} height={4} />
+          <IntentStrip turns={turns} height={4} intentHierarchy={intentHierarchy} />
         </div>
       </button>
 
@@ -159,7 +159,7 @@ function RunConversationCard({ conversation, index, intentHierarchy = {} }) {
           >
             <div className="border-t border-slate-800/30 px-3 py-3 space-y-3">
               <div className="bg-slate-900/40 rounded-lg p-2.5">
-                <SpeakerIntentLanes turns={turns} />
+                <SpeakerIntentLanes turns={turns} intentHierarchy={intentHierarchy} />
               </div>
               <div className="space-y-0.5">
                 {turns.map((turn, ti) => {
@@ -536,6 +536,8 @@ export default function Experiments() {
   const [runResults, setRunResults] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [intentHierarchy, setIntentHierarchy] = useState({});
+  const [resultsPage, setResultsPage] = useState(1);
+  const RESULTS_PAGE_SIZE = 20;
 
   const loadRuns = async (expId) => {
     setRunsLoading(true);
@@ -924,15 +926,45 @@ export default function Experiments() {
                       );
                     })()}
 
-                    {/* Conversations */}
+                    {/* Conversations (paginated) */}
                     {resultsLoading ? (
                       <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
                     ) : runResults?.length > 0 ? (
-                      <div className="space-y-1.5">
-                        {runResults.map((conv, i) => (
-                          <RunConversationCard key={conv.conversation_id} conversation={conv} index={i} intentHierarchy={intentHierarchy} />
-                        ))}
-                      </div>
+                      <>
+                        <div className="space-y-1.5">
+                          {runResults
+                            .slice((resultsPage - 1) * RESULTS_PAGE_SIZE, resultsPage * RESULTS_PAGE_SIZE)
+                            .map((conv, i) => (
+                              <RunConversationCard key={conv.conversation_id} conversation={conv} index={i} intentHierarchy={intentHierarchy} />
+                            ))}
+                        </div>
+                        {runResults.length > RESULTS_PAGE_SIZE && (
+                          <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-800/50">
+                            <span className="text-[10px] text-slate-600">
+                              {(resultsPage - 1) * RESULTS_PAGE_SIZE + 1}–{Math.min(resultsPage * RESULTS_PAGE_SIZE, runResults.length)} of {runResults.length} conversations
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setResultsPage(p => Math.max(1, p - 1))}
+                                disabled={resultsPage === 1}
+                                className="px-2 py-1 text-[10px] rounded bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                Prev
+                              </button>
+                              <span className="text-[10px] text-slate-500 px-2">
+                                {resultsPage} / {Math.ceil(runResults.length / RESULTS_PAGE_SIZE)}
+                              </span>
+                              <button
+                                onClick={() => setResultsPage(p => Math.min(Math.ceil(runResults.length / RESULTS_PAGE_SIZE), p + 1))}
+                                disabled={resultsPage >= Math.ceil(runResults.length / RESULTS_PAGE_SIZE)}
+                                className="px-2 py-1 text-[10px] rounded bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="text-center py-4 text-slate-600 text-xs">No results</div>
                     )}
