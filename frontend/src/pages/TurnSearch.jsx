@@ -484,42 +484,31 @@ export default function TurnSearch() {
                           </div>
                         );
                       })}
-                      {/* Standalone labels (no parent) */}
-                      {standalone.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {standalone.map(intent => {
-                            const isSelected = selectedIntents.includes(intent);
-                            const color = getIntentColor(intent);
-                            return (
-                              <button
-                                key={intent}
-                                onClick={() => toggleIntent(intent)}
-                                className={`text-[11px] px-2 py-1 rounded-md border transition-all ${
-                                  isSelected ? 'border-current opacity-100' : 'border-slate-700/50 opacity-50 hover:opacity-75'
-                                }`}
-                                style={{ color, borderColor: isSelected ? color : undefined }}
-                              >
-                                {formatCategoryName(intent)}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {/* Fallback: no groups, show flat */}
-                      {!hasGroups && standalone.length === 0 && filterOptions.intent_labels.map(intent => {
+                      {/* Standalone labels (no parent) — shown as single-row toggles in same style */}
+                      {standalone.map(intent => {
                         const isSelected = selectedIntents.includes(intent);
                         const color = getIntentColor(intent);
                         return (
-                          <button
-                            key={intent}
-                            onClick={() => toggleIntent(intent)}
-                            className={`text-[11px] px-2 py-1 rounded-md border transition-all ${
-                              isSelected ? 'border-current opacity-100' : 'border-slate-700/50 opacity-50 hover:opacity-75'
-                            }`}
-                            style={{ color, borderColor: isSelected ? color : undefined }}
-                          >
-                            {formatCategoryName(intent)}
-                          </button>
+                          <div key={intent} className="flex items-center gap-1.5">
+                            <div className="w-3 flex-shrink-0" />
+                            <button
+                              onClick={() => toggleIntent(intent)}
+                              className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 transition-colors"
+                              style={{
+                                borderColor: isSelected ? color : 'rgb(51 65 85 / 0.5)',
+                                backgroundColor: isSelected ? color : 'transparent',
+                              }}
+                            >
+                              {isSelected && <Check size={10} className="text-slate-900" />}
+                            </button>
+                            <button
+                              onClick={() => toggleIntent(intent)}
+                              className={`text-[11px] transition-opacity ${isSelected ? 'opacity-100' : 'opacity-50 hover:opacity-75'}`}
+                              style={{ color }}
+                            >
+                              {formatCategoryName(intent)}
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
