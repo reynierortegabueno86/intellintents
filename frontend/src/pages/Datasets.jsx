@@ -318,11 +318,22 @@ export default function Datasets() {
                     </button>
                   )}
                   <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      // delete not in spec but placeholder
+                      if (!confirm(`Delete "${ds.name}"? This will remove all conversations and turns.`)) return;
+                      try {
+                        await api.deleteDataset(ds.id);
+                        if (selectedDataset?.id === ds.id) {
+                          setSelectedDataset(null);
+                          setConversations(null);
+                        }
+                        await reload();
+                      } catch (err) {
+                        alert('Delete failed: ' + err.message);
+                      }
                     }}
                     className="text-slate-600 hover:text-red-400 transition-colors"
+                    title="Delete dataset"
                   >
                     <Trash2 size={14} />
                   </button>
