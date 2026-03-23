@@ -428,18 +428,21 @@ function ExperimentForm({ datasets, taxonomies, methods, initial, onSubmit, onCa
 }
 
 // ── Experiment row (horizontal card) ────────────────────────────
-function ExperimentRow({ exp, isSelected, onSelect, onFavorite, onDuplicate, onRun, onDelete, onEdit, runningExp }) {
+function ExperimentRow({ exp, isSelected, onSelect, onFavorite, onDuplicate, onRun, onDelete, onEdit, runningExp, runProgress }) {
+  const isRunning = runningExp === exp.id;
+  const pct = runProgress && runProgress.total > 0 ? Math.round((runProgress.current / runProgress.total) * 100) : 0;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={() => onSelect(exp)}
-      className={`flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer group transition-all ${
+      className={`rounded-xl cursor-pointer group transition-all ${
         isSelected
           ? 'bg-cyan-400/5 border border-cyan-400/30 shadow-lg shadow-cyan-400/5'
           : 'bg-slate-800/20 border border-transparent hover:bg-slate-800/40 hover:border-slate-700/40'
       }`}
     >
+      <div className="flex items-center gap-4 px-4 py-3">
       {/* Favorite */}
       <button onClick={(e) => { e.stopPropagation(); onFavorite(exp); }} className="flex-shrink-0">
         <Star size={14} className={exp.is_favorite ? 'text-yellow-400 fill-yellow-400' : 'text-slate-700 hover:text-yellow-400 transition-colors'} />
@@ -481,13 +484,32 @@ function ExperimentRow({ exp, isSelected, onSelect, onFavorite, onDuplicate, onR
         <button onClick={(e) => { e.stopPropagation(); onDuplicate(exp); }} className="p-1.5 text-slate-600 hover:text-slate-300 rounded-md hover:bg-slate-800/60">
           <Copy size={12} />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onRun(exp.id); }} disabled={runningExp === exp.id} className="p-1.5 text-emerald-400/60 hover:text-emerald-400 rounded-md hover:bg-emerald-400/5">
-          {runningExp === exp.id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+        <button onClick={(e) => { e.stopPropagation(); onRun(exp.id); }} disabled={isRunning} className="p-1.5 text-emerald-400/60 hover:text-emerald-400 rounded-md hover:bg-emerald-400/5">
+          {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
         </button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(exp); }} className="p-1.5 text-slate-600 hover:text-red-400 rounded-md hover:bg-red-400/5">
           <Trash2 size={12} />
         </button>
       </div>
+      </div>
+      {/* Progress bar */}
+      {isRunning && runProgress && runProgress.total > 0 && (
+        <div className="px-4 pb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-cyan-400"
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+              />
+            </div>
+            <span className="text-[10px] text-slate-500 tabular-nums flex-shrink-0">
+              {runProgress.current} / {runProgress.total} turns · {pct}%
+            </span>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -506,6 +528,7 @@ export default function Experiments() {
   const [runs, setRuns] = useState([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [runningExp, setRunningExp] = useState(null);
+  const [runProgress, setRunProgress] = useState(null); // { current, total }
   const [viewingRun, setViewingRun] = useState(null);
   const [runResults, setRunResults] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
@@ -549,6 +572,7 @@ export default function Experiments() {
 
   const handleRun = async (expId) => {
     setRunningExp(expId);
+    setRunProgress(null);
     try {
       const runData = await api.runExperiment(expId);
       const runId = runData?.id;
@@ -559,10 +583,15 @@ export default function Experiments() {
       pollRef.current = setInterval(async () => {
         try {
           const status = await api.getRun(runId);
+          // Update progress
+          if (status.progress_total > 0) {
+            setRunProgress({ current: status.progress_current || 0, total: status.progress_total });
+          }
           if (status.status === 'completed' || status.status === 'failed') {
             clearInterval(pollRef.current);
             pollRef.current = null;
             setRunningExp(null);
+            setRunProgress(null);
             if (selectedExp === expId) await loadRuns(expId);
             await reload();
             if (status.status === 'failed') {
@@ -574,11 +603,13 @@ export default function Experiments() {
           clearInterval(pollRef.current);
           pollRef.current = null;
           setRunningExp(null);
+          setRunProgress(null);
         }
       }, 2000);
     } catch (err) {
       alert('Run failed: ' + err.message);
       setRunningExp(null);
+      setRunProgress(null);
     }
   };
   const handleToggleFavorite = async (exp) => { await api.updateExperiment(exp.id, { is_favorite: !exp.is_favorite }); await reload(); };
@@ -656,6 +687,7 @@ export default function Experiments() {
                 onDelete={handleDelete}
                 onEdit={(e) => { setEditingExp(e); setShowCreate(false); }}
                 runningExp={runningExp}
+                runProgress={runningExp === exp.id ? runProgress : null}
               />
             ))}
           </div>
@@ -686,6 +718,14 @@ export default function Experiments() {
                 {selectedExpDetail.created_by && <span>By: <span className="text-slate-300">{selectedExpDetail.created_by}</span></span>}
               </div>
               <div className="ml-auto flex items-center gap-2">
+                {runningExp === selectedExp && runProgress && runProgress.total > 0 && (
+                  <div className="flex items-center gap-2 mr-2">
+                    <div className="w-24 h-1 rounded-full bg-slate-800 overflow-hidden">
+                      <div className="h-full rounded-full bg-cyan-400 transition-all duration-500" style={{ width: `${Math.round((runProgress.current / runProgress.total) * 100)}%` }} />
+                    </div>
+                    <span className="text-[10px] text-slate-500 tabular-nums">{Math.round((runProgress.current / runProgress.total) * 100)}%</span>
+                  </div>
+                )}
                 <button onClick={() => handleRun(selectedExp)} disabled={runningExp === selectedExp}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-400/10 text-emerald-400 border border-emerald-400/20 rounded-lg hover:bg-emerald-400/20 disabled:opacity-50">
                   {runningExp === selectedExp ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}

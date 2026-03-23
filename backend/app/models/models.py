@@ -165,6 +165,8 @@ class Run(Base):
     runtime_duration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # seconds
     configuration_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
     results_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
+    progress_current: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    progress_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
     is_favorite: Mapped[bool] = mapped_column(Integer, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
