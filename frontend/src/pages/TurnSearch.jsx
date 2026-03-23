@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, User, Bot, ExternalLink } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, User, Bot, ExternalLink, Check, Minus } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import * as api from '../utils/api';
 import IntentBadge from '../components/IntentBadge';
 import { getIntentColor } from '../utils/colors';
 import { cleanHtml } from '../utils/cleanHtml';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatCategoryName, getCategoryCode } from '../utils/formatCategoryName';
+import { buildIntentHierarchy, groupIntentsByParent } from '../utils/intentHierarchy';
 
 function HighlightText({ text, keyword, maxLen = 200 }) {
   const clean = cleanHtml(text);
@@ -86,6 +87,10 @@ export default function TurnSearch() {
   const [maxConf, setMaxConf] = useState(restored?.maxConf ?? '');
   const [groundTruth, setGroundTruth] = useState(restored?.groundTruth ?? '');
 
+  // Taxonomy hierarchy for grouping intent labels
+  const [intentHierarchy, setIntentHierarchy] = useState({});
+  const [expandedGroups, setExpandedGroups] = useState({});
+
   // Results
   const [results, setResults] = useState(restored?.results ?? null);
   const [loading, setLoading] = useState(false);
@@ -145,6 +150,14 @@ export default function TurnSearch() {
     api.getTurnFilterOptions(datasetId, runId ? null : taxonomyId, runId)
       .then(setFilterOptions).catch(() => setFilterOptions(null));
   }, [datasetId, taxonomyId, runId]);
+
+  // Load taxonomy hierarchy for grouping intent labels
+  useEffect(() => {
+    if (!taxonomyId) { setIntentHierarchy({}); return; }
+    api.getTaxonomy(taxonomyId)
+      .then(t => setIntentHierarchy(buildIntentHierarchy(t.categories || [])))
+      .catch(() => setIntentHierarchy({}));
+  }, [taxonomyId]);
 
   // Reset filters and page when dataset/taxonomy/run changes
   useEffect(() => {
@@ -378,37 +391,141 @@ export default function TurnSearch() {
                 )}
               </div>
 
-              {/* Intent label multi-select */}
-              {filterOptions.intent_labels.length > 0 && (
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    Intent Labels
-                    {selectedIntents.length > 0 && (
-                      <span className="ml-2 text-cyan-400">({selectedIntents.length} selected)</span>
-                    )}
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 bg-slate-800/40 rounded-lg p-2 max-h-32 overflow-y-auto">
-                    {filterOptions.intent_labels.map(intent => {
-                      const isSelected = selectedIntents.includes(intent);
-                      const color = getIntentColor(intent);
-                      return (
-                        <button
-                          key={intent}
-                          onClick={() => toggleIntent(intent)}
-                          className={`text-[11px] px-2 py-1 rounded-md border transition-all ${
-                            isSelected
-                              ? 'border-current opacity-100'
-                              : 'border-slate-700/50 opacity-50 hover:opacity-75'
-                          }`}
-                          style={{ color, borderColor: isSelected ? color : undefined }}
-                        >
-                          {formatCategoryName(intent)}
-                        </button>
-                      );
-                    })}
+              {/* Intent label multi-select — grouped by parent category */}
+              {filterOptions.intent_labels.length > 0 && (() => {
+                const { groups, standalone } = groupIntentsByParent(filterOptions.intent_labels, intentHierarchy);
+                const parentNames = Object.keys(groups).sort();
+                const hasGroups = parentNames.length > 0;
+
+                return (
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Intent Labels
+                      {selectedIntents.length > 0 && (
+                        <span className="ml-2 text-cyan-400">({selectedIntents.length} selected)</span>
+                      )}
+                    </label>
+                    <div className="bg-slate-800/40 rounded-lg p-2 max-h-48 overflow-y-auto space-y-1">
+                      {/* Grouped categories */}
+                      {parentNames.map(parent => {
+                        const children = groups[parent];
+                        const isExpanded = !!expandedGroups[parent];
+                        const selectedCount = children.filter(c => selectedIntents.includes(c)).length;
+                        const allSelected = selectedCount === children.length;
+                        const someSelected = selectedCount > 0 && !allSelected;
+                        const color = getIntentColor(parent);
+                        const code = getCategoryCode(parent);
+
+                        const toggleAll = () => {
+                          if (allSelected) {
+                            setSelectedIntents(prev => prev.filter(i => !children.includes(i)));
+                          } else {
+                            setSelectedIntents(prev => [...new Set([...prev, ...children])]);
+                          }
+                        };
+
+                        return (
+                          <div key={parent}>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setExpandedGroups(prev => ({ ...prev, [parent]: !prev[parent] }))}
+                                className="text-slate-500 hover:text-slate-300 flex-shrink-0"
+                              >
+                                {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                              </button>
+                              <button
+                                onClick={toggleAll}
+                                className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 transition-colors"
+                                style={{
+                                  borderColor: allSelected || someSelected ? color : 'rgb(51 65 85 / 0.5)',
+                                  backgroundColor: allSelected ? color : 'transparent',
+                                }}
+                                title={allSelected ? 'Deselect all' : 'Select all'}
+                              >
+                                {allSelected && <Check size={10} className="text-slate-900" />}
+                                {someSelected && <Minus size={10} style={{ color }} />}
+                              </button>
+                              <button
+                                onClick={() => setExpandedGroups(prev => ({ ...prev, [parent]: !prev[parent] }))}
+                                className="flex items-center gap-1.5 text-[11px] hover:opacity-80 transition-opacity"
+                                style={{ color }}
+                              >
+                                <span className="font-mono font-bold text-[9px] opacity-70">{code}</span>
+                                <span>{formatCategoryName(parent)}</span>
+                                <span className="text-slate-600">({children.length})</span>
+                                {selectedCount > 0 && !allSelected && (
+                                  <span className="text-[9px] opacity-60">{selectedCount} sel</span>
+                                )}
+                              </button>
+                            </div>
+                            {isExpanded && (
+                              <div className="ml-6 mt-0.5 flex flex-wrap gap-1 mb-1">
+                                {children.map(child => {
+                                  const isSelected = selectedIntents.includes(child);
+                                  return (
+                                    <button
+                                      key={child}
+                                      onClick={() => toggleIntent(child)}
+                                      className={`text-[10px] px-1.5 py-0.5 rounded border transition-all ${
+                                        isSelected ? 'opacity-100' : 'opacity-40 hover:opacity-70'
+                                      }`}
+                                      style={{
+                                        color,
+                                        borderColor: isSelected ? color : 'rgb(51 65 85 / 0.5)',
+                                        backgroundColor: isSelected ? `${color}15` : 'transparent',
+                                      }}
+                                    >
+                                      {formatCategoryName(child)}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* Standalone labels (no parent) */}
+                      {standalone.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {standalone.map(intent => {
+                            const isSelected = selectedIntents.includes(intent);
+                            const color = getIntentColor(intent);
+                            return (
+                              <button
+                                key={intent}
+                                onClick={() => toggleIntent(intent)}
+                                className={`text-[11px] px-2 py-1 rounded-md border transition-all ${
+                                  isSelected ? 'border-current opacity-100' : 'border-slate-700/50 opacity-50 hover:opacity-75'
+                                }`}
+                                style={{ color, borderColor: isSelected ? color : undefined }}
+                              >
+                                {formatCategoryName(intent)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Fallback: no groups, show flat */}
+                      {!hasGroups && standalone.length === 0 && filterOptions.intent_labels.map(intent => {
+                        const isSelected = selectedIntents.includes(intent);
+                        const color = getIntentColor(intent);
+                        return (
+                          <button
+                            key={intent}
+                            onClick={() => toggleIntent(intent)}
+                            className={`text-[11px] px-2 py-1 rounded-md border transition-all ${
+                              isSelected ? 'border-current opacity-100' : 'border-slate-700/50 opacity-50 hover:opacity-75'
+                            }`}
+                            style={{ color, borderColor: isSelected ? color : undefined }}
+                          >
+                            {formatCategoryName(intent)}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Clear all */}
               {hasActiveFilters && (
@@ -488,7 +605,7 @@ export default function TurnSearch() {
                         </td>
                         {hasLabels && (
                           <td className="px-3 py-2 whitespace-nowrap">
-                            {row.intent_label ? <IntentBadge label={row.intent_label} size="xs" /> : <span className="text-slate-600 text-xs">-</span>}
+                            {row.intent_label ? <IntentBadge label={row.intent_label} parentLabel={intentHierarchy[row.intent_label]} size="xs" /> : <span className="text-slate-600 text-xs">-</span>}
                           </td>
                         )}
                         {hasLabels && (

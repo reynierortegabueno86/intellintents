@@ -46,3 +46,33 @@ export function groupDistributionByParent(distribution, hierarchy) {
   for (const g of result) g.children.sort((a, b) => b.count - a.count);
   return result;
 }
+
+/**
+ * Group a flat list of intent label strings by parent category.
+ *
+ * Returns: { groups: { "ONBOARDING_KYC": ["open_account", ...], ... }, standalone: ["COMPLAINT", ...] }
+ * "standalone" are labels with no parent (root-level or unknown).
+ */
+export function groupIntentsByParent(intentLabels, hierarchy) {
+  if (!intentLabels) return { groups: {}, standalone: [] };
+
+  const groups = {};
+  const standalone = [];
+
+  for (const label of intentLabels) {
+    const parent = hierarchy[label];
+    if (parent) {
+      if (!groups[parent]) groups[parent] = [];
+      groups[parent].push(label);
+    } else {
+      standalone.push(label);
+    }
+  }
+
+  // Sort children alphabetically within each group
+  for (const parent of Object.keys(groups)) {
+    groups[parent].sort();
+  }
+
+  return { groups, standalone };
+}
