@@ -904,21 +904,15 @@ export default function Experiments() {
                     {viewingRun.results_summary?.intent_distribution && (() => {
                       const groups = groupDistributionByParent(viewingRun.results_summary.intent_distribution, intentHierarchy);
                       return (
-                        <div className="space-y-1.5 mb-4">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
                           {groups.map(group => (
-                            <div key={group.parent}>
-                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
-                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getIntentColor(group.parent) }} />
-                                {formatCategoryName(group.parent)}: {group.total}
-                              </div>
+                            <div key={group.parent} className="flex items-center gap-1.5 text-[10px]">
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: getIntentColor(group.parent) }} />
+                              <span className="text-slate-400 font-medium">{formatCategoryName(group.parent)}: {group.total}</span>
                               {group.children.length > 0 && (
-                                <div className="ml-4 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                                  {group.children.map(child => (
-                                    <span key={child.label} className="text-[10px] text-slate-500">
-                                      {formatCategoryName(child.label)}: {child.count}
-                                    </span>
-                                  ))}
-                                </div>
+                                <span className="text-slate-600">
+                                  ({group.children.map(c => `${formatCategoryName(c.label)}: ${c.count}`).join(', ')})
+                                </span>
                               )}
                             </div>
                           ))}
