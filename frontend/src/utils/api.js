@@ -37,6 +37,7 @@ export const loadDatasetFromSource = (source, name, description) =>
 export const getDataset = (id) => request(`/datasets/${id}`);
 export const getConversations = (datasetId) => request(`/datasets/${datasetId}/conversations`);
 export const getConversation = (datasetId, convId) => request(`/datasets/${datasetId}/conversations/${convId}`);
+export const updateDataset = (id, data) => request(`/datasets/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 export const deleteDataset = (id) => request(`/datasets/${id}`, { method: 'DELETE' });
 export const getDatasetRuns = (datasetId) => request(`/datasets/${datasetId}/runs`);
 

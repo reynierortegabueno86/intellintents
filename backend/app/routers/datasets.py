@@ -13,6 +13,7 @@ from app.schemas.schemas import (
     ConversationRead,
     DatasetLoadSource,
     DatasetRead,
+    DatasetUpdate,
     FilterOptionsResponse,
     TurnSearchResponse,
 )
@@ -282,6 +283,27 @@ async def turn_search(
         page=page,
         page_size=page_size,
     )
+
+
+@router.patch("/{dataset_id}", response_model=DatasetRead)
+async def update_dataset(
+    dataset_id: int,
+    data: DatasetUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a dataset's name and/or description."""
+    dataset = await db.get(Dataset, dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if data.name is not None:
+        dataset.name = data.name
+    if data.description is not None:
+        dataset.description = data.description
+
+    await db.commit()
+    await db.refresh(dataset)
+    return dataset
 
 
 @router.delete("/{dataset_id}")

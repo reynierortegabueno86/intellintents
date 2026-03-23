@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Database, Plus, Trash2, Play, FileText, Loader2, Link, ChevronRight, ChevronDown, User, Bot } from 'lucide-react';
+import { Upload, Database, Plus, Trash2, Play, FileText, Loader2, Link, ChevronRight, ChevronDown, User, Bot, Pencil, Check, X } from 'lucide-react';
 import { useApi, useLazyApi } from '../hooks/useApi';
 import * as api from '../utils/api';
 
@@ -24,6 +24,10 @@ export default function Datasets() {
   const [expandedConv, setExpandedConv] = useState(null);
   const [turns, setTurns] = useState([]);
   const [turnsLoading, setTurnsLoading] = useState(false);
+  const [editingDataset, setEditingDataset] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -89,6 +93,41 @@ export default function Datasets() {
       setTurns([]);
     } finally {
       setTurnsLoading(false);
+    }
+  };
+
+  const startEditing = (e, ds) => {
+    e.stopPropagation();
+    setEditingDataset(ds.id);
+    setEditName(ds.name);
+    setEditDesc(ds.description || '');
+  };
+
+  const cancelEditing = (e) => {
+    e.stopPropagation();
+    setEditingDataset(null);
+  };
+
+  const saveEditing = async (e, ds) => {
+    e.stopPropagation();
+    if (!editName.trim()) return;
+    setEditSaving(true);
+    try {
+      const updates = {};
+      if (editName.trim() !== ds.name) updates.name = editName.trim();
+      if (editDesc !== (ds.description || '')) updates.description = editDesc || null;
+      if (Object.keys(updates).length > 0) {
+        await api.updateDataset(ds.id, updates);
+        await reload();
+        if (selectedDataset?.id === ds.id) {
+          setSelectedDataset({ ...selectedDataset, ...updates });
+        }
+      }
+      setEditingDataset(null);
+    } catch (err) {
+      alert('Update failed: ' + err.message);
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -268,18 +307,74 @@ export default function Datasets() {
                 <div className="w-9 h-9 rounded-lg bg-violet-400/10 flex items-center justify-center">
                   <Database size={18} className="text-violet-400" />
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // delete not in spec but placeholder
-                  }}
-                  className="text-slate-600 hover:text-red-400 transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex items-center gap-1">
+                  {editingDataset !== ds.id && (
+                    <button
+                      onClick={(e) => startEditing(e, ds)}
+                      className="text-slate-600 hover:text-cyan-400 transition-colors"
+                      title="Edit dataset"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // delete not in spec but placeholder
+                    }}
+                    className="text-slate-600 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
-              <h3 className="text-sm font-semibold text-white mb-1">{ds.name}</h3>
-              {ds.description && <p className="text-xs text-slate-500 mb-2 line-clamp-2">{ds.description}</p>}
+              {editingDataset === ds.id ? (
+                <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Dataset name"
+                    className="w-full bg-slate-800/80 border border-slate-700/50 rounded px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-cyan-400/50"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveEditing(e, ds);
+                      if (e.key === 'Escape') cancelEditing(e);
+                    }}
+                  />
+                  <textarea
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    placeholder="Description (optional)"
+                    rows={2}
+                    className="w-full bg-slate-800/80 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-400/50 resize-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') cancelEditing(e);
+                    }}
+                  />
+                  <div className="flex gap-1 justify-end">
+                    <button
+                      onClick={(e) => cancelEditing(e)}
+                      className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
+                      title="Cancel"
+                    >
+                      <X size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => saveEditing(e, ds)}
+                      disabled={editSaving || !editName.trim()}
+                      className="p-1 rounded text-cyan-400 hover:text-cyan-300 hover:bg-cyan-400/10 transition-colors disabled:opacity-30"
+                      title="Save"
+                    >
+                      {editSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h3 className="text-sm font-semibold text-white mb-1">{ds.name}</h3>
+                  {ds.description && <p className="text-xs text-slate-500 mb-2 line-clamp-2">{ds.description}</p>}
+                </>
+              )}
               {ds.status === 'processing' ? (
                 <div className="flex items-center gap-2 text-xs text-amber-400">
                   <Loader2 size={12} className="animate-spin" />

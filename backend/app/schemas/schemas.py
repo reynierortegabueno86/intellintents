@@ -49,6 +49,13 @@ class DatasetUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, v):
+        if v is not None:
+            return _validate_name(v)
+        return v
+
 
 class DatasetUpload(BaseModel):
     name: str
