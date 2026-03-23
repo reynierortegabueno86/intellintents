@@ -15,7 +15,7 @@ import asyncio
 from app.services.experiment_service import (
     create_experiment, update_experiment, get_experiment_read,
     validate_labels, start_experiment_run, execute_run_background,
-    get_run_results,
+    get_run_results, request_pause,
 )
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -115,6 +115,38 @@ async def get_results(run_id: int, db: AsyncSession = Depends(get_db)):
     if not run:
         raise HTTPException(404, "Run not found")
     return await get_run_results(db, run_id)
+
+
+@router.patch("/runs/{run_id}/pause", tags=["runs"])
+async def pause_run(run_id: int, db: AsyncSession = Depends(get_db)):
+    """Pause a running experiment run after its current batch finishes."""
+    run = await db.get(Run, run_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if run.status != "running":
+        raise HTTPException(409, f"Cannot pause a run with status '{run.status}'")
+    if not request_pause(run_id):
+        raise HTTPException(409, "No active background task found for this run")
+    return _run_to_dict(run)
+
+
+@router.post("/runs/{run_id}/resume", tags=["runs"])
+async def resume_run(run_id: int, db: AsyncSession = Depends(get_db)):
+    """Resume a paused run from where it left off."""
+    run = await db.get(Run, run_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if run.status != "paused":
+        raise HTTPException(409, f"Cannot resume a run with status '{run.status}'")
+
+    initial_offset = run.progress_current or 0
+    run.status = "running"
+    await db.commit()
+
+    asyncio.create_task(
+        execute_run_background(run.id, run.experiment_id, initial_offset=initial_offset)
+    )
+    return _run_to_dict(run)
 
 
 @router.delete("/runs/{run_id}", tags=["runs"])

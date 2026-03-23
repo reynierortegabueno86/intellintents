@@ -100,6 +100,8 @@ export const runExperiment = (id) => request(`/experiments/${id}/run`, { method:
 export const getExperimentRuns = (id) => request(`/experiments/${id}/runs`);
 export const getRun = (runId) => request(`/experiments/runs/${runId}`);
 export const getRunResults = (runId) => request(`/experiments/runs/${runId}/results`);
+export const pauseRun = (runId) => request(`/experiments/runs/${runId}/pause`, { method: 'PATCH' });
+export const resumeRun = (runId) => request(`/experiments/runs/${runId}/resume`, { method: 'POST' });
 export const deleteRun = (runId) => request(`/experiments/runs/${runId}`, { method: 'DELETE' });
 export const getExperimentLabelMapping = (id) => request(`/experiments/${id}/label-mapping`);
 export const setExperimentLabelMapping = (id, mappings) => request(`/experiments/${id}/label-mapping`, { method: 'POST', body: JSON.stringify(mappings) });

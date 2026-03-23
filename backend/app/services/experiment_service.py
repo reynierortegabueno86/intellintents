@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from collections import Counter
 
 from sqlalchemy import select, func
@@ -19,6 +19,31 @@ from app.database import get_session_factory
 from app.services.classification_service import get_classifier, is_fallback_label, _group_turns_by_conversation
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Pause signaling — in-memory registry of asyncio.Events keyed by run_id.
+# The API endpoint sets the event; the batch loop checks it between batches.
+# ---------------------------------------------------------------------------
+_pause_signals: Dict[int, asyncio.Event] = {}
+
+
+def request_pause(run_id: int) -> bool:
+    """Signal a running background task to pause after its current batch."""
+    event = _pause_signals.get(run_id)
+    if event:
+        event.set()
+        return True
+    return False
+
+
+def _register_signal(run_id: int) -> asyncio.Event:
+    event = asyncio.Event()
+    _pause_signals[run_id] = event
+    return event
+
+
+def _unregister_signal(run_id: int):
+    _pause_signals.pop(run_id, None)
 
 
 async def create_experiment(db: AsyncSession, data: dict) -> Experiment:
@@ -193,11 +218,12 @@ async def start_experiment_run(db: AsyncSession, experiment_id: int) -> Run:
     return run
 
 
-async def execute_run_background(run_id: int, experiment_id: int) -> None:
+async def execute_run_background(run_id: int, experiment_id: int, initial_offset: int = 0) -> None:
     """Execute the classification. Uses its own DB session (safe for background tasks)."""
+    signal = _register_signal(run_id)
     try:
         async with get_session_factory()() as db:
-            await _execute_run(db, run_id, experiment_id)
+            await _execute_run(db, run_id, experiment_id, pause_signal=signal, initial_offset=initial_offset)
     except Exception as e:
         # Last-resort handler: ensure the run is marked as failed
         logger.error("Background run %d crashed: %s", run_id, str(e))
@@ -210,6 +236,8 @@ async def execute_run_background(run_id: int, experiment_id: int) -> None:
                     await db.commit()
         except Exception:
             logger.error("Failed to mark run %d as failed after crash", run_id)
+    finally:
+        _unregister_signal(run_id)
 
 
 async def run_experiment(db: AsyncSession, experiment_id: int) -> Run:
@@ -249,11 +277,14 @@ async def _execute_run(
     run_id: int,
     experiment_id: int,
     batch_size: int = 500,
+    pause_signal: Optional[asyncio.Event] = None,
+    initial_offset: int = 0,
 ) -> None:
     """Core classification logic shared by sync and background execution.
 
     Processes turns in batches of ``batch_size`` to avoid loading the entire
-    dataset into memory at once.
+    dataset into memory at once.  Supports pause/resume via ``pause_signal``
+    and ``initial_offset``.
     """
     run = await db.get(Run, run_id)
     exp = await db.get(Experiment, experiment_id)
@@ -261,8 +292,9 @@ async def _execute_run(
         return
 
     run.status = "running"
-    run.progress_current = 0
-    run.progress_total = 0
+    if initial_offset == 0:
+        run.progress_current = 0
+        run.progress_total = 0
     await db.commit()
 
     params = json.loads(exp.classifier_parameters) if exp.classifier_parameters else None
@@ -298,31 +330,63 @@ async def _execute_run(
         except ClassifierConfigError as e:
             raise ValueError(f"Classifier configuration error: {e}")
 
-        # Pre-flight check on first turn
-        preflight_result = await db.execute(
-            select(Turn)
-            .join(Conversation, Turn.conversation_id == Conversation.id)
-            .where(Conversation.dataset_id == exp.dataset_id)
-            .limit(1)
-        )
-        first_turn = preflight_result.scalar_one_or_none()
-        if first_turn:
-            try:
-                classifier.classify_turn(first_turn.text, taxonomy_categories)
-            except ClassifierConfigError as e:
-                raise ValueError(f"Classifier configuration error: {e}")
+        # Pre-flight check on first turn (skip on resume — already validated)
+        if initial_offset == 0:
+            preflight_result = await db.execute(
+                select(Turn)
+                .join(Conversation, Turn.conversation_id == Conversation.id)
+                .where(Conversation.dataset_id == exp.dataset_id)
+                .limit(1)
+            )
+            first_turn = preflight_result.scalar_one_or_none()
+            if first_turn:
+                try:
+                    classifier.classify_turn(first_turn.text, taxonomy_categories)
+                except ClassifierConfigError as e:
+                    raise ValueError(f"Classifier configuration error: {e}")
 
         loop = asyncio.get_event_loop()
         use_conv_batch = hasattr(classifier, 'classify_conversation_batch')
 
         intent_counter: Counter = Counter()
         total_confidence = 0.0
-        processed = 0
+        processed = initial_offset
         conversation_ids = set()
 
+        # On resume: rebuild stats from already-stored classifications
+        if initial_offset > 0:
+            existing = await db.execute(
+                select(
+                    RunClassification.intent_label,
+                    func.count(RunClassification.id),
+                    func.sum(RunClassification.confidence),
+                )
+                .where(RunClassification.run_id == run_id)
+                .group_by(RunClassification.intent_label)
+            )
+            for label, cnt, conf_sum in existing.all():
+                intent_counter[label] = cnt
+                total_confidence += conf_sum or 0.0
+
+            existing_convs = await db.execute(
+                select(RunClassification.conversation_id)
+                .where(RunClassification.run_id == run_id)
+                .distinct()
+            )
+            conversation_ids = {row[0] for row in existing_convs.all()}
+            logger.info("Run %d: resuming from offset %d, %d existing classifications", run_id, initial_offset, sum(intent_counter.values()))
+
         # Process turns in batches
-        offset = 0
+        offset = initial_offset
         while offset < total_turns:
+            # Check pause signal before starting a new batch
+            if pause_signal and pause_signal.is_set():
+                run.status = "paused"
+                run.progress_current = processed
+                await db.commit()
+                logger.info("Run %d: paused at %d / %d turns", run_id, processed, total_turns)
+                return
+
             # Load a batch of turns
             batch_result = await db.execute(
                 select(Turn)
