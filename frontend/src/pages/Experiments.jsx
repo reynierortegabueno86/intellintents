@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FlaskConical, Plus, Play, Trash2, Star, ChevronRight, ChevronDown,
+  FlaskConical, Plus, Play, Pause, Trash2, Star, ChevronRight, ChevronDown,
   Loader2, CheckCircle, AlertCircle, XCircle, Clock, Copy,
   Bot, User, ArrowRightLeft, Hash, MessageSquare, Sparkles,
   Settings2, ListChecks, Eye, Pencil, X,
@@ -57,6 +57,7 @@ function StatusBadge({ status }) {
     completed: { cls: 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20', icon: <CheckCircle size={10} /> },
     running:   { cls: 'bg-cyan-400/10 text-cyan-400 border-cyan-400/20', icon: <Loader2 size={10} className="animate-spin" /> },
     pending:   { cls: 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20', icon: <Clock size={10} /> },
+    paused:    { cls: 'bg-amber-400/10 text-amber-400 border-amber-400/20', icon: <Pause size={10} /> },
     failed:    { cls: 'bg-red-400/10 text-red-400 border-red-400/20', icon: <XCircle size={10} /> },
   };
   const c = cfg[status] || cfg.pending;
@@ -587,7 +588,7 @@ export default function Experiments() {
           if (status.progress_total > 0) {
             setRunProgress({ current: status.progress_current || 0, total: status.progress_total });
           }
-          if (status.status === 'completed' || status.status === 'failed') {
+          if (status.status === 'completed' || status.status === 'failed' || status.status === 'paused') {
             clearInterval(pollRef.current);
             pollRef.current = null;
             setRunningExp(null);
@@ -608,6 +609,52 @@ export default function Experiments() {
       setRunProgress(null);
     }
   };
+  const handlePause = async (runId, expId) => {
+    try {
+      await api.pauseRun(runId);
+      // Polling will pick up the "paused" status and stop
+    } catch (err) {
+      alert('Pause failed: ' + err.message);
+    }
+  };
+
+  const handleResume = async (run) => {
+    const expId = run.experiment_id;
+    setRunningExp(expId);
+    setRunProgress(run.progress_total > 0 ? { current: run.progress_current || 0, total: run.progress_total } : null);
+    try {
+      const resumed = await api.resumeRun(run.id);
+      const runId = resumed?.id || run.id;
+
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await api.getRun(runId);
+          if (status.progress_total > 0) {
+            setRunProgress({ current: status.progress_current || 0, total: status.progress_total });
+          }
+          if (status.status === 'completed' || status.status === 'failed' || status.status === 'paused') {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+            setRunningExp(null);
+            setRunProgress(null);
+            if (selectedExp === expId) await loadRuns(expId);
+            await reload();
+          }
+        } catch {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setRunningExp(null);
+          setRunProgress(null);
+        }
+      }, 2000);
+    } catch (err) {
+      alert('Resume failed: ' + err.message);
+      setRunningExp(null);
+      setRunProgress(null);
+    }
+  };
+
   const handleToggleFavorite = async (exp) => { await api.updateExperiment(exp.id, { is_favorite: !exp.is_favorite }); await reload(); };
   const handleViewRun = async (run) => {
     if (viewingRun?.id === run.id) { setViewingRun(null); setRunResults(null); return; }
@@ -777,7 +824,24 @@ export default function Experiments() {
                           <span>{run.results_summary.unique_intents || 0} intents</span>
                           <span>{((run.results_summary.avg_confidence || 0) * 100).toFixed(0)}%</span>
                         </div>
+                      ) : run.status === 'paused' && run.progress_total > 0 ? (
+                        <div className="flex items-center gap-2 ml-auto text-[10px] text-amber-400">
+                          <Pause size={10} />
+                          <span>{run.progress_current || 0} / {run.progress_total} turns</span>
+                        </div>
                       ) : null}
+                      {run.status === 'running' && (
+                        <button onClick={(e) => { e.stopPropagation(); handlePause(run.id, run.experiment_id); }}
+                          className="text-slate-600 hover:text-amber-400 transition-colors" title="Pause">
+                          <Pause size={11} />
+                        </button>
+                      )}
+                      {run.status === 'paused' && (
+                        <button onClick={(e) => { e.stopPropagation(); handleResume(run); }}
+                          className="text-slate-600 hover:text-emerald-400 transition-colors" title="Resume">
+                          <Play size={11} />
+                        </button>
+                      )}
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteRun(run); }} className="text-slate-700 hover:text-red-400 transition-colors">
                         <Trash2 size={11} />
                       </button>
