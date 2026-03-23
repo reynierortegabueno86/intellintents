@@ -126,7 +126,15 @@ async def pause_run(run_id: int, db: AsyncSession = Depends(get_db)):
     if run.status != "running":
         raise HTTPException(409, f"Cannot pause a run with status '{run.status}'")
     if not request_pause(run_id):
-        raise HTTPException(409, "No active background task found for this run")
+        # Re-read in case the task finished between the status check and now
+        await db.refresh(run)
+        if run.status != "running":
+            return _run_to_dict(run)
+        raise HTTPException(
+            409,
+            "No active background task found for this run. "
+            "Ensure the server is running with --workers 1 (single process)."
+        )
     return _run_to_dict(run)
 
 
