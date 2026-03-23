@@ -176,9 +176,24 @@ class LLMBaseClassifier(BaseClassifier):
         return response.content[0].text.strip()
 
     def _call_llm(self, messages: List[Dict[str, str]], model: Optional[str] = None) -> str:
+        from app.classifiers.llm_cache import get_cached, put_cached
+
+        effective_model = model or self.model
+
+        # Check cache first
+        cached = get_cached(self.provider, effective_model, messages)
+        if cached is not None:
+            return cached
+
+        # Call the API
         if self.provider == "anthropic":
-            return self._call_anthropic(messages, model=model)
-        return self._call_openai(messages, model=model)
+            response = self._call_anthropic(messages, model=model)
+        else:
+            response = self._call_openai(messages, model=model)
+
+        # Store in cache
+        put_cached(self.provider, effective_model, messages, response)
+        return response
 
     # ── Response parsing ──────────────────────────────────────────
 

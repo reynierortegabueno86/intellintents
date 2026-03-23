@@ -2,6 +2,7 @@ import logging
 import os
 import random
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from pathlib import Path
 
@@ -163,6 +164,26 @@ _api_router.include_router(taxonomy.router)
 _api_router.include_router(classification.router)
 _api_router.include_router(analytics.router)
 _api_router.include_router(experiments.router)
+
+# ---------------------------------------------------------------------------
+# LLM Cache endpoints
+# ---------------------------------------------------------------------------
+from app.classifiers.llm_cache import cache_stats, clear_cache
+
+
+@_api_router.get("/llm-cache/stats", tags=["llm-cache"])
+async def llm_cache_stats():
+    """Get LLM response cache statistics."""
+    return cache_stats()
+
+
+@_api_router.delete("/llm-cache", tags=["llm-cache"])
+async def llm_cache_clear(provider: Optional[str] = None, model: Optional[str] = None):
+    """Clear LLM response cache. Optionally filter by provider and/or model."""
+    deleted = clear_cache(provider=provider, model=model)
+    return {"deleted": deleted}
+
+
 sub_app.include_router(_api_router)
 
 
