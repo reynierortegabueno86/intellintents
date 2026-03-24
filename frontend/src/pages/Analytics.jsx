@@ -316,6 +316,29 @@ export default function Analytics() {
                   const pieData = rest.length > 0
                     ? [...top, { name: `Other (${rest.length})`, count: rest.reduce((s, d) => s + d.count, 0) }]
                     : top;
+
+                  const RADIAN = Math.PI / 180;
+                  const renderPieLabel = ({ cx, cy, midAngle, outerRadius: or, name, percent }) => {
+                    const radius = or + 28;
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    const v = formatIntentCompact(name, intentHierarchy);
+                    const display = v.length > 16 ? v.slice(0, 16) + '..' : v;
+                    const pct = (percent * 100).toFixed(0);
+                    return (
+                      <text
+                        x={x}
+                        y={y}
+                        fill="#cbd5e1"
+                        fontSize={10}
+                        textAnchor={x > cx ? 'start' : 'end'}
+                        dominantBaseline="central"
+                      >
+                        {`${display} ${pct}%`}
+                      </text>
+                    );
+                  };
+
                   return (
                     <ResponsiveContainer width="100%" height={420}>
                       <PieChart>
@@ -325,11 +348,11 @@ export default function Analytics() {
                           nameKey="name"
                           cx="50%"
                           cy="50%"
-                          outerRadius={130}
-                          innerRadius={55}
+                          outerRadius={110}
+                          innerRadius={45}
                           paddingAngle={2}
-                          label={({ name, percent }) => { if (percent <= 0.03) return ''; const v = formatIntentCompact(name, intentHierarchy); return `${v.length > 18 ? v.slice(0, 18) + '..' : v} ${(percent * 100).toFixed(0)}%`; }}
-                          labelLine={{ stroke: '#475569' }}
+                          label={renderPieLabel}
+                          labelLine={{ stroke: '#475569', strokeWidth: 1 }}
                         >
                           {pieData.map((e) => (
                             <Cell key={e.name} fill={getIntentColor(intentHierarchy[e.name] || e.name)} fillOpacity={0.8} />
