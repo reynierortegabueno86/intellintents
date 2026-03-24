@@ -37,7 +37,7 @@ class ContextCascadingClassifier(CascadingClassifier):
     def __init__(
         self,
         provider: str = "openai",
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-5.2",
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         temperature: float = 0.0,
