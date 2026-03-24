@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { getIntentColor } from '../utils/colors';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
 
-export default function IntentHeatmap({ data }) {
+export default function IntentHeatmap({ data, intentHierarchy = {} }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -80,9 +80,9 @@ export default function IntentHeatmap({ data }) {
         .attr('x', -8)
         .attr('y', i * cellSize + cellSize / 2 + 4)
         .attr('text-anchor', 'end')
-        .attr('fill', getIntentColor(intent))
+        .attr('fill', getIntentColor(intentHierarchy[intent] || intent))
         .attr('font-size', '11px')
-        .text(() => { const v = formatCategoryName(intent); return v.length > 18 ? v.slice(0, 18) + '..' : v; });
+        .text(() => { const v = formatIntentCompact(intent, intentHierarchy); return v.length > 20 ? v.slice(0, 20) + '..' : v; });
     });
 
     // X axis label
@@ -103,7 +103,7 @@ export default function IntentHeatmap({ data }) {
           className="fixed z-50 glass-card px-3 py-2 text-xs pointer-events-none"
           style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
         >
-          <div className="font-semibold text-white">{formatCategoryName(tooltip.intent)}</div>
+          <div className="font-semibold text-white">{formatIntentCompact(tooltip.intent, intentHierarchy)}</div>
           <div className="text-slate-400">Turn: {tooltip.turn}</div>
           <div className="text-cyan-400">Count: {tooltip.count}</div>
         </div>

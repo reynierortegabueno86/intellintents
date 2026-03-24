@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { getIntentColor } from '../utils/colors';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
 
 export default function FilterPanel({
   datasets = [],
   taxonomies = [],
   intents = [],
+  intentHierarchy = {},
   selectedDataset,
   selectedTaxonomy,
   onDatasetChange,
@@ -87,7 +88,7 @@ export default function FilterPanel({
                   <div className="flex flex-wrap gap-1.5 bg-slate-800/40 rounded-lg p-2">
                     {intents.map((intent) => {
                       const isSelected = selectedIntents.includes(intent);
-                      const color = getIntentColor(intent);
+                      const color = getIntentColor(intentHierarchy[intent] || intent);
                       return (
                         <button
                           key={intent}
@@ -105,7 +106,7 @@ export default function FilterPanel({
                           }`}
                           style={{ color, borderColor: isSelected ? color : undefined }}
                         >
-                          {formatCategoryName(intent)}
+                          {formatIntentCompact(intent, intentHierarchy)}
                         </button>
                       );
                     })}

@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { getIntentColor, getIntentColorWithAlpha } from '../utils/colors';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
 
 /**
  * Minimalist fancy visualization of an intent sequence.
@@ -97,10 +97,7 @@ export function SpeakerIntentLanes({ turns, intentHierarchy = {} }) {
             {intents.map((intent, i) => {
               const colorKey = intentHierarchy[intent] || intent;
               const color = getIntentColor(colorKey);
-              const parentName = intentHierarchy[intent];
-              const tooltip = parentName
-                ? `${formatCategoryName(parentName)}: ${formatCategoryName(intent)}`
-                : formatCategoryName(intent);
+              const tooltip = formatIntentCompact(intent, intentHierarchy);
               return (
                 <motion.div
                   key={i}
@@ -143,10 +140,7 @@ export function IntentStrip({ turns, height = 6, intentHierarchy = {} }) {
       {turns.map((t, i) => {
         const colorKey = intentHierarchy[t.intent_label] || t.intent_label;
         const color = getIntentColor(colorKey);
-        const parentName = intentHierarchy[t.intent_label];
-        const intentDisplay = parentName
-          ? `${formatCategoryName(parentName)}: ${formatCategoryName(t.intent_label)}`
-          : formatCategoryName(t.intent_label);
+        const intentDisplay = formatIntentCompact(t.intent_label, intentHierarchy);
         return (
           <div
             key={i}

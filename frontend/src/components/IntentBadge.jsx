@@ -1,8 +1,12 @@
 import { getIntentColor, getIntentColorWithAlpha } from '../utils/colors';
-import { formatCategoryName, getCategoryCode } from '../utils/formatCategoryName';
+import { formatCategoryName, getCategoryCode, isRootCategory } from '../utils/formatCategoryName';
 
 export default function IntentBadge({ label, parentLabel, size = 'sm' }) {
-  const colorKey = parentLabel || label;
+  // Auto-detect: if label is a root category with no explicit parentLabel,
+  // treat it as a parent with "general" as the sub-intent display name.
+  const isAutoRoot = !parentLabel && isRootCategory(label);
+  const effectiveParent = parentLabel || (isAutoRoot ? label : null);
+  const colorKey = effectiveParent || label;
   const color = getIntentColor(colorKey);
 
   const childSizes = {
@@ -17,8 +21,9 @@ export default function IntentBadge({ label, parentLabel, size = 'sm' }) {
   };
 
   // Hierarchical: two-segment layered badge [CODE | sub-intent]
-  if (parentLabel) {
-    const code = getCategoryCode(parentLabel);
+  if (effectiveParent) {
+    const code = getCategoryCode(effectiveParent);
+    const displayName = isAutoRoot ? 'general' : (formatCategoryName(label) || 'Unknown');
     return (
       <span className="inline-flex items-stretch rounded-md overflow-hidden" style={{ border: `1px solid ${getIntentColorWithAlpha(colorKey, 0.2)}` }}>
         <span
@@ -28,7 +33,7 @@ export default function IntentBadge({ label, parentLabel, size = 'sm' }) {
             color,
             opacity: 0.7,
           }}
-          title={formatCategoryName(parentLabel)}
+          title={formatCategoryName(effectiveParent)}
         >
           {code}
         </span>
@@ -39,7 +44,7 @@ export default function IntentBadge({ label, parentLabel, size = 'sm' }) {
             color,
           }}
         >
-          {formatCategoryName(label) || 'Unknown'}
+          {displayName}
         </span>
       </span>
     );

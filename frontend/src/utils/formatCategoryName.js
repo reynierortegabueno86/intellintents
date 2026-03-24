@@ -44,6 +44,36 @@ export function getCategoryCode(name) {
 }
 
 /**
+ * Returns true if name is an UPPER_CASE root category (e.g., "ONBOARDING_KYC").
+ */
+export function isRootCategory(name) {
+  if (!name) return false;
+  const stripped = name.replace(/_/g, '');
+  return stripped === stripped.toUpperCase() && stripped !== stripped.toLowerCase();
+}
+
+/**
+ * Compact intent label for charts, tables, and tooltips.
+ *
+ *   formatIntentCompact("open_account", hierarchy)   → "ONK: open account"
+ *   formatIntentCompact("ONBOARDING_KYC", hierarchy) → "ONK: general"
+ *   formatIntentCompact("UNKNOWN", {})               → "UNK: general"
+ *
+ * Returns a short string suitable for axis labels, table headers, etc.
+ */
+export function formatIntentCompact(label, hierarchy = {}) {
+  if (!label) return '';
+  const parent = hierarchy[label];
+  if (parent) {
+    return `${getCategoryCode(parent)}: ${formatCategoryName(label)}`;
+  }
+  if (isRootCategory(label)) {
+    return `${getCategoryCode(label)}: general`;
+  }
+  return formatCategoryName(label);
+}
+
+/**
  * Convert user input to DB storage format.
  *   "Open Account" → "OPEN_ACCOUNT" (root) or "open_account" (child)
  */

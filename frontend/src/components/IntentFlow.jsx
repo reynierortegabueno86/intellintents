@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { getIntentColor, getIntentColorWithAlpha } from '../utils/colors';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
 
-export default function IntentFlow({ data }) {
+export default function IntentFlow({ data, intentHierarchy = {} }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -146,7 +146,7 @@ export default function IntentFlow({ data }) {
       const x0 = source.x + nodeWidth;
       const x1 = target.x;
       const cpx = (x0 + x1) / 2;
-      const color = getIntentColor(source.nodeId);
+      const color = getIntentColor(intentHierarchy[source.nodeId] || source.nodeId);
 
       linkGroup
         .append('path')
@@ -164,8 +164,8 @@ export default function IntentFlow({ data }) {
             x: event.pageX,
             y: event.pageY,
             type: 'link',
-            source: formatCategoryName(source.nodeId),
-            target: formatCategoryName(target.nodeId),
+            source: formatIntentCompact(source.nodeId, intentHierarchy),
+            target: formatIntentCompact(target.nodeId, intentHierarchy),
             value: val,
             color,
           });
@@ -179,7 +179,7 @@ export default function IntentFlow({ data }) {
     // ── Draw nodes ──
     const nodeGroup = g.append('g');
     Object.values(nodeMap).forEach((n) => {
-      const color = getIntentColor(n.nodeId);
+      const color = getIntentColor(intentHierarchy[n.nodeId] || n.nodeId);
 
       // Glow background
       nodeGroup
@@ -209,7 +209,7 @@ export default function IntentFlow({ data }) {
             x: event.pageX,
             y: event.pageY,
             type: 'node',
-            name: formatCategoryName(n.nodeId),
+            name: formatIntentCompact(n.nodeId, intentHierarchy),
             count: n.count || n.value || 0,
             color,
           });
