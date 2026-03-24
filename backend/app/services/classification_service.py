@@ -108,7 +108,7 @@ def get_classifier(method: str, config: Optional[Dict[str, Any]] = None) -> Base
     elif method == "cascading":
         return CascadingClassifier(
             provider=config.get("provider", "openai"),
-            model=config.get("model", "gpt-4o-mini"),
+            model=config.get("model", "gpt-5.2"),
             api_key=config.get("api_key"),
             base_url=config.get("base_url"),
             temperature=config.get("temperature", 0.0),
@@ -122,7 +122,7 @@ def get_classifier(method: str, config: Optional[Dict[str, Any]] = None) -> Base
     elif method == "cascading_context":
         return ContextCascadingClassifier(
             provider=config.get("provider", "openai"),
-            model=config.get("model", "gpt-4o-mini"),
+            model=config.get("model", "gpt-5.2"),
             api_key=config.get("api_key"),
             base_url=config.get("base_url"),
             temperature=config.get("temperature", 0.0),
