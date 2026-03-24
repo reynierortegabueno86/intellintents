@@ -4,6 +4,7 @@ import { User, Bot, ChevronDown, ChevronUp } from 'lucide-react';
 import IntentBadge from './IntentBadge';
 import { cleanHtml } from '../utils/cleanHtml';
 
+
 function SpeakerIcon({ speaker }) {
   const s = (speaker || '').toLowerCase();
   const isUser = s === 'user' || s === 'customer';
@@ -47,7 +48,7 @@ function TurnCard({ turn, index }) {
             Turn {turn.turn_index ?? index + 1}
           </span>
           {(turn.intent || turn.intent_label) && (
-            <IntentBadge label={turn.intent || turn.intent_label} size="xs" />
+            <IntentBadge label={turn.intent || turn.intent_label} parentLabel={intentHierarchy[turn.intent || turn.intent_label]} size="xs" />
           )}
           {turn.confidence != null && (
             <span className="text-[9px] text-slate-600 font-mono">
@@ -108,7 +109,7 @@ function TurnCard({ turn, index }) {
   );
 }
 
-export default function ConversationTimeline({ turns = [] }) {
+export default function ConversationTimeline({ turns = [], intentHierarchy = {} }) {
   if (!turns.length) {
     return (
       <div className="text-center py-12 text-slate-500">

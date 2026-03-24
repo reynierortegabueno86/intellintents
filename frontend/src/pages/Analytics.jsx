@@ -11,7 +11,8 @@ import IntentGalaxy from '../components/IntentGalaxy';
 import IntentFlow from '../components/IntentFlow';
 import IntentHeatmap from '../components/IntentHeatmap';
 import { getIntentColor } from '../utils/colors';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
+import { buildIntentHierarchy } from '../utils/intentHierarchy';
 
 function Skeleton({ className }) {
   return <div className={`skeleton ${className}`} />;
@@ -19,29 +20,33 @@ function Skeleton({ className }) {
 
 const TABS = ['Distribution', 'Galaxy', 'Flow', 'Heatmap', 'Transitions'];
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="glass-card px-3 py-2 text-xs">
-      <div className="text-white font-medium">{label || payload[0]?.name}</div>
-      <div className="text-cyan-400">Count: {payload[0].value}</div>
-    </div>
-  );
-};
+function makeCustomTooltip(hierarchy = {}) {
+  return ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="glass-card px-3 py-2 text-xs">
+        <div className="text-white font-medium">{formatIntentCompact(label || payload[0]?.name, hierarchy)}</div>
+        <div className="text-cyan-400">Count: {payload[0].value}</div>
+      </div>
+    );
+  };
+}
 
-const AngledTick = ({ x, y, payload }) => (
-  <g transform={`translate(${x},${y})`}>
-    <text
-      x={0} y={0} dy={10}
-      textAnchor="end"
-      fill="#94a3b8"
-      fontSize={9}
-      transform="rotate(-50)"
-    >
-      {(() => { const v = formatCategoryName(payload.value); return v?.length > 20 ? v.slice(0, 20) + '..' : v; })()}
-    </text>
-  </g>
-);
+function makeAngledTick(hierarchy = {}) {
+  return ({ x, y, payload }) => (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0} y={0} dy={10}
+        textAnchor="end"
+        fill="#94a3b8"
+        fontSize={9}
+        transform="rotate(-50)"
+      >
+        {(() => { const v = formatIntentCompact(payload.value, hierarchy); return v?.length > 22 ? v.slice(0, 22) + '..' : v; })()}
+      </text>
+    </g>
+  );
+}
 
 // Build galaxy {nodes, edges} from flat transitions array
 function buildGalaxyFromTransitions(transitions) {
@@ -163,6 +168,7 @@ export default function Analytics() {
   const [distribution, setDistribution] = useState(null);
   const [transitions, setTransitions] = useState(null);
   const [rawHeatmap, setRawHeatmap] = useState(null);
+  const [intentHierarchy, setIntentHierarchy] = useState({});
   const [loading, setLoading] = useState(false);
 
   // Auto-select: prefer dataset/taxonomy that has experiment runs with data
@@ -188,10 +194,12 @@ export default function Analytics() {
       api.getAnalyticsDistribution(datasetId, taxonomyId).catch(() => null),
       api.getAnalyticsTransitions(datasetId, taxonomyId).catch(() => null),
       api.getAnalyticsHeatmap(datasetId, taxonomyId).catch(() => null),
-    ]).then(([dist, trans, hm]) => {
+      api.getTaxonomy(taxonomyId).then(t => buildIntentHierarchy(t.categories || [])).catch(() => ({})),
+    ]).then(([dist, trans, hm, hier]) => {
       setDistribution(dist);
       setTransitions(trans);
       setRawHeatmap(hm);
+      setIntentHierarchy(hier);
       setLoading(false);
     });
   }, [datasetId, taxonomyId]);
@@ -234,6 +242,7 @@ export default function Analytics() {
         datasets={datasets || []}
         taxonomies={taxonomies || []}
         intents={intentLabels}
+        intentHierarchy={intentHierarchy}
         selectedDataset={datasetId ?? ''}
         selectedTaxonomy={taxonomyId ?? ''}
         onDatasetChange={handleDatasetChange}
@@ -279,16 +288,16 @@ export default function Analytics() {
                     <BarChart data={distData.slice(0, 20)} margin={{ top: 5, right: 10, bottom: 10, left: 10 }}>
                       <XAxis
                         dataKey="name"
-                        tick={<AngledTick />}
+                        tick={makeAngledTick(intentHierarchy)}
                         interval={0}
                         height={130}
                         tickLine={false}
                       />
                       <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
-                      <Tooltip content={<CustomTooltip />} />
+                      <Tooltip content={makeCustomTooltip(intentHierarchy)} />
                       <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                         {distData.slice(0, 20).map((e) => (
-                          <Cell key={e.name} fill={getIntentColor(e.name)} fillOpacity={0.8} />
+                          <Cell key={e.name} fill={getIntentColor(intentHierarchy[e.name] || e.name)} fillOpacity={0.8} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -307,6 +316,29 @@ export default function Analytics() {
                   const pieData = rest.length > 0
                     ? [...top, { name: `Other (${rest.length})`, count: rest.reduce((s, d) => s + d.count, 0) }]
                     : top;
+
+                  const RADIAN = Math.PI / 180;
+                  const renderPieLabel = ({ cx, cy, midAngle, outerRadius: or, name, percent }) => {
+                    const radius = or + 28;
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    const v = formatIntentCompact(name, intentHierarchy);
+                    const display = v.length > 16 ? v.slice(0, 16) + '..' : v;
+                    const pct = (percent * 100).toFixed(0);
+                    return (
+                      <text
+                        x={x}
+                        y={y}
+                        fill="#cbd5e1"
+                        fontSize={10}
+                        textAnchor={x > cx ? 'start' : 'end'}
+                        dominantBaseline="central"
+                      >
+                        {`${display} ${pct}%`}
+                      </text>
+                    );
+                  };
+
                   return (
                     <ResponsiveContainer width="100%" height={420}>
                       <PieChart>
@@ -316,17 +348,17 @@ export default function Analytics() {
                           nameKey="name"
                           cx="50%"
                           cy="50%"
-                          outerRadius={130}
-                          innerRadius={55}
+                          outerRadius={110}
+                          innerRadius={45}
                           paddingAngle={2}
-                          label={({ name, percent }) => percent > 0.03 ? `${name.length > 15 ? name.slice(0, 15) + '..' : name} ${(percent * 100).toFixed(0)}%` : ''}
-                          labelLine={{ stroke: '#475569' }}
+                          label={renderPieLabel}
+                          labelLine={{ stroke: '#475569', strokeWidth: 1 }}
                         >
                           {pieData.map((e) => (
-                            <Cell key={e.name} fill={getIntentColor(e.name)} fillOpacity={0.8} />
+                            <Cell key={e.name} fill={getIntentColor(intentHierarchy[e.name] || e.name)} fillOpacity={0.8} />
                           ))}
                         </Pie>
-                        <Tooltip content={<CustomTooltip />} />
+                        <Tooltip content={makeCustomTooltip(intentHierarchy)} />
                       </PieChart>
                     </ResponsiveContainer>
                   );
@@ -341,7 +373,7 @@ export default function Analytics() {
             <div className="glass-card p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">Intent Galaxy</h3>
               {galaxyData && galaxyData.nodes.length > 0 ? (
-                <IntentGalaxy data={galaxyData} height={600} />
+                <IntentGalaxy data={galaxyData} height={600} intentHierarchy={intentHierarchy} />
               ) : (
                 <div className="h-96 flex items-center justify-center text-slate-600 text-sm">
                   No transition data available
@@ -354,7 +386,7 @@ export default function Analytics() {
             <div className="glass-card p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">Intent Flow</h3>
               {flowData && flowData.nodes.length > 0 ? (
-                <IntentFlow data={flowData} />
+                <IntentFlow data={flowData} intentHierarchy={intentHierarchy} />
               ) : (
                 <div className="h-96 flex items-center justify-center text-slate-600 text-sm">
                   No flow data available
@@ -367,7 +399,7 @@ export default function Analytics() {
             <div className="glass-card p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">Intent Heatmap</h3>
               {heatmapData ? (
-                <IntentHeatmap data={heatmapData} />
+                <IntentHeatmap data={heatmapData} intentHierarchy={intentHierarchy} />
               ) : (
                 <div className="h-96 flex items-center justify-center text-slate-600 text-sm">
                   No heatmap data available
@@ -386,9 +418,9 @@ export default function Analytics() {
                       <tr>
                         <th className="px-3 py-2 text-slate-500 text-left sticky left-0 z-20 bg-slate-900 border-b border-r border-slate-800/50 min-w-[140px]">From / To</th>
                         {transTable.labels.map((l) => (
-                          <th key={l} className="px-2 py-2 text-slate-500 font-medium bg-slate-900 border-b border-slate-800/50 whitespace-nowrap" style={{ color: getIntentColor(l) }}
-                              title={l}>
-                            {l.length > 14 ? l.slice(0, 14) + '..' : l}
+                          <th key={l} className="px-2 py-2 text-slate-500 font-medium bg-slate-900 border-b border-slate-800/50 whitespace-nowrap" style={{ color: getIntentColor(intentHierarchy[l] || l) }}
+                              title={formatIntentCompact(l, intentHierarchy)}>
+                            {(() => { const v = formatIntentCompact(l, intentHierarchy); return v.length > 16 ? v.slice(0, 16) + '..' : v; })()}
                           </th>
                         ))}
                       </tr>
@@ -398,9 +430,9 @@ export default function Analytics() {
                         const maxVal = Math.max(...transTable.matrix.flat().filter(Number.isFinite));
                         return (
                           <tr key={i} className="hover:bg-slate-800/20">
-                            <td className="px-3 py-1.5 font-medium sticky left-0 bg-slate-900/95 border-r border-slate-800/50 whitespace-nowrap" style={{ color: getIntentColor(transTable.labels[i]) }}
-                                title={transTable.labels[i]}>
-                              {transTable.labels[i]?.length > 18 ? transTable.labels[i].slice(0, 18) + '..' : transTable.labels[i]}
+                            <td className="px-3 py-1.5 font-medium sticky left-0 bg-slate-900/95 border-r border-slate-800/50 whitespace-nowrap" style={{ color: getIntentColor(intentHierarchy[transTable.labels[i]] || transTable.labels[i]) }}
+                                title={formatIntentCompact(transTable.labels[i], intentHierarchy)}>
+                              {(() => { const v = formatIntentCompact(transTable.labels[i], intentHierarchy); return v.length > 20 ? v.slice(0, 20) + '..' : v; })()}
                             </td>
                             {row.map((val, j) => {
                               const intensity = maxVal > 0 ? val / maxVal : 0;

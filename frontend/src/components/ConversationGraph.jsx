@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { getIntentColor } from '../utils/colors';
 import { cleanHtml } from '../utils/cleanHtml';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
 
-export default function ConversationGraph({ data }) {
+export default function ConversationGraph({ data, intentHierarchy = {} }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -74,8 +74,8 @@ export default function ConversationGraph({ data }) {
       .data(nodes)
       .join('circle')
       .attr('r', 14)
-      .attr('fill', (d) => getIntentColor(d.intent))
-      .attr('stroke', (d) => getIntentColor(d.intent))
+      .attr('fill', (d) => getIntentColor(intentHierarchy[d.intent] || d.intent))
+      .attr('stroke', (d) => getIntentColor(intentHierarchy[d.intent] || d.intent))
       .attr('stroke-width', 3)
       .attr('stroke-opacity', 0.3)
       .attr('cursor', 'pointer')
@@ -135,7 +135,7 @@ export default function ConversationGraph({ data }) {
           style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
         >
           <div className="font-semibold text-white">{tooltip.label}</div>
-          <div className="text-cyan-400">{formatCategoryName(tooltip.intent)}</div>
+          <div className="text-cyan-400">{formatIntentCompact(tooltip.intent, intentHierarchy)}</div>
           {tooltip.text && <div className="text-slate-400 mt-1 max-w-[200px]">{tooltip.text}</div>}
         </div>
       )}

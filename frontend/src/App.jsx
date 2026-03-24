@@ -4,7 +4,6 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Datasets from './pages/Datasets';
 import Taxonomy from './pages/Taxonomy';
-import Classification from './pages/Classification';
 import Analytics from './pages/Analytics';
 import Conversations from './pages/Conversations';
 import Experiments from './pages/Experiments';
@@ -27,7 +26,6 @@ function AnimatedRoutes() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/datasets" element={<Datasets />} />
           <Route path="/taxonomy" element={<Taxonomy />} />
-          <Route path="/classification" element={<Classification />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/conversations" element={<Conversations />} />
           <Route path="/experiments" element={<Experiments />} />

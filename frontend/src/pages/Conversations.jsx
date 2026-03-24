@@ -7,6 +7,7 @@ import * as api from '../utils/api';
 import ConversationTimeline from '../components/ConversationTimeline';
 import ConversationGraph from '../components/ConversationGraph';
 import IntentBadge from '../components/IntentBadge';
+import { buildIntentHierarchy } from '../utils/intentHierarchy';
 
 function Skeleton({ className }) {
   return <div className={`skeleton ${className}`} />;
@@ -24,6 +25,7 @@ export default function Conversations() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [graphData, setGraphData] = useState(null);
   const [viewMode, setViewMode] = useState('timeline'); // timeline | graph
+  const [intentHierarchy, setIntentHierarchy] = useState({});
   const pendingConversationId = useRef(searchParams.get('conversationId'));
 
   useEffect(() => {
@@ -64,6 +66,20 @@ export default function Conversations() {
       })
       .catch(() => setConversations([]))
       .finally(() => setLoading(false));
+  }, [datasetId]);
+
+  // Load intent hierarchy from the first available run's taxonomy
+  useEffect(() => {
+    if (!datasetId) return;
+    api.getDatasetRuns(datasetId)
+      .then(runs => {
+        if (runs?.length > 0) {
+          return api.getTaxonomy(runs[0].taxonomy_id);
+        }
+        return null;
+      })
+      .then(t => setIntentHierarchy(t ? buildIntentHierarchy(t.categories || []) : {}))
+      .catch(() => setIntentHierarchy({}));
   }, [datasetId]);
 
   const loadConversationDetail = async (conv, dsId) => {
@@ -212,7 +228,7 @@ export default function Conversations() {
                 {intentsInConv.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {intentsInConv.map((intent) => (
-                      <IntentBadge key={intent} label={intent} size="xs" />
+                      <IntentBadge key={intent} label={intent} parentLabel={intentHierarchy[intent]} size="xs" />
                     ))}
                   </div>
                 )}
@@ -225,12 +241,12 @@ export default function Conversations() {
                 </div>
               ) : viewMode === 'timeline' ? (
                 <div className="glass-card p-4 max-h-[calc(100vh-350px)] overflow-y-auto">
-                  <ConversationTimeline turns={turns} />
+                  <ConversationTimeline turns={turns} intentHierarchy={intentHierarchy} />
                 </div>
               ) : (
                 <div className="glass-card p-4">
                   {graphData ? (
-                    <ConversationGraph data={graphData} />
+                    <ConversationGraph data={graphData} intentHierarchy={intentHierarchy} />
                   ) : (
                     <div className="h-80 flex items-center justify-center text-slate-600 text-sm">
                       No graph data available

@@ -7,7 +7,8 @@ import {
   Sparkles,
   Hash,
 } from 'lucide-react';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
+import { buildIntentHierarchy } from '../utils/intentHierarchy';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -21,29 +22,33 @@ function Skeleton({ className }) {
   return <div className={`skeleton ${className}`} />;
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="glass-card px-3 py-2 text-xs">
-      <div className="text-white font-medium">{label}</div>
-      <div className="text-cyan-400">Count: {payload[0].value}</div>
-    </div>
-  );
-};
+function makeCustomTooltip(hierarchy = {}) {
+  return ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="glass-card px-3 py-2 text-xs">
+        <div className="text-white font-medium">{formatIntentCompact(label, hierarchy)}</div>
+        <div className="text-cyan-400">Count: {payload[0].value}</div>
+      </div>
+    );
+  };
+}
 
-const AngledTick = ({ x, y, payload }) => (
-  <g transform={`translate(${x},${y})`}>
-    <text
-      x={0} y={0} dy={10}
-      textAnchor="end"
-      fill="#94a3b8"
-      fontSize={9}
-      transform="rotate(-50)"
-    >
-      {(() => { const v = formatCategoryName(payload.value); return v?.length > 20 ? v.slice(0, 20) + '..' : v; })()}
-    </text>
-  </g>
-);
+function makeAngledTick(hierarchy = {}) {
+  return ({ x, y, payload }) => (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0} y={0} dy={10}
+        textAnchor="end"
+        fill="#94a3b8"
+        fontSize={9}
+        transform="rotate(-50)"
+      >
+        {(() => { const v = formatIntentCompact(payload.value, hierarchy); return v?.length > 22 ? v.slice(0, 22) + '..' : v; })()}
+      </text>
+    </g>
+  );
+}
 
 function buildGalaxyFromTransitions(transitions) {
   if (!transitions || !Array.isArray(transitions) || transitions.length === 0) return null;
@@ -73,6 +78,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [distribution, setDistribution] = useState(null);
   const [graphData, setGraphData] = useState(null);
+  const [intentHierarchy, setIntentHierarchy] = useState({});
   const [loading, setLoading] = useState(true);
 
   // Auto-select: prefer dataset/taxonomy that has experiment runs with data
@@ -99,10 +105,12 @@ export default function Dashboard() {
       api.getAnalyticsSummary(datasetId).catch(() => null),
       api.getAnalyticsDistribution(datasetId, taxonomyId).catch(() => null),
       api.getAnalyticsTransitions(datasetId, taxonomyId).catch(() => null),
-    ]).then(([sum, dist, trans]) => {
+      api.getTaxonomy(taxonomyId).then(t => buildIntentHierarchy(t.categories || [])).catch(() => ({})),
+    ]).then(([sum, dist, trans, hier]) => {
       setSummary(sum);
       setDistribution(dist);
       setGraphData(buildGalaxyFromTransitions(trans));
+      setIntentHierarchy(hier);
       setLoading(false);
     });
   }, [datasetId, taxonomyId]);
@@ -193,16 +201,16 @@ export default function Dashboard() {
               <BarChart data={distChartData.slice(0, 15)} margin={{ top: 5, right: 10, bottom: 10, left: 10 }}>
                 <XAxis
                   dataKey="name"
-                  tick={<AngledTick />}
+                  tick={makeAngledTick(intentHierarchy)}
                   interval={0}
                   height={120}
                   tickLine={false}
                 />
                 <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={makeCustomTooltip(intentHierarchy)} />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                   {distChartData.slice(0, 15).map((entry) => (
-                    <Cell key={entry.name} fill={getIntentColor(entry.name)} fillOpacity={0.8} />
+                    <Cell key={entry.name} fill={getIntentColor(intentHierarchy[entry.name] || entry.name)} fillOpacity={0.8} />
                   ))}
                 </Bar>
               </BarChart>
@@ -225,7 +233,7 @@ export default function Dashboard() {
           {isLoading ? (
             <Skeleton className="h-64" />
           ) : graphData && graphData.nodes.length > 0 ? (
-            <IntentGalaxy data={graphData} height={400} />
+            <IntentGalaxy data={graphData} height={400} intentHierarchy={intentHierarchy} />
           ) : (
             <div className="h-64 flex items-center justify-center text-slate-600 text-sm">
               No graph data available

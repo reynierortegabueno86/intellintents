@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { getIntentColor } from '../utils/colors';
-import { formatCategoryName } from '../utils/formatCategoryName';
+import { formatIntentCompact } from '../utils/formatCategoryName';
 
-export default function IntentGalaxy({ data, height }) {
+export default function IntentGalaxy({ data, height, intentHierarchy = {} }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -43,7 +43,7 @@ export default function IntentGalaxy({ data, height }) {
     // Defs for glow
     const defs = svg.append('defs');
     nodes.forEach((n) => {
-      const color = getIntentColor(n.id);
+      const color = getIntentColor(intentHierarchy[n.id] || n.id);
       const grad = defs.append('radialGradient').attr('id', `glow-${n.id.replace(/\s+/g, '-')}`);
       grad.append('stop').attr('offset', '0%').attr('stop-color', color).attr('stop-opacity', 0.6);
       grad.append('stop').attr('offset', '100%').attr('stop-color', color).attr('stop-opacity', 0);
@@ -87,8 +87,8 @@ export default function IntentGalaxy({ data, height }) {
       .data(nodes)
       .join('circle')
       .attr('r', (d) => d.radius)
-      .attr('fill', (d) => getIntentColor(d.id))
-      .attr('stroke', (d) => getIntentColor(d.id))
+      .attr('fill', (d) => getIntentColor(intentHierarchy[d.id] || d.id))
+      .attr('stroke', (d) => getIntentColor(intentHierarchy[d.id] || d.id))
       .attr('stroke-width', 2)
       .attr('stroke-opacity', 0.5)
       .attr('cursor', 'pointer')
@@ -114,7 +114,7 @@ export default function IntentGalaxy({ data, height }) {
       .selectAll('text')
       .data(nodes)
       .join('text')
-      .text((d) => formatCategoryName(d.id))
+      .text((d) => formatIntentCompact(d.id, intentHierarchy))
       .attr('text-anchor', 'middle')
       .attr('dy', (d) => d.radius + 14)
       .attr('fill', 'rgba(203, 213, 225, 0.7)')
@@ -172,7 +172,7 @@ export default function IntentGalaxy({ data, height }) {
           className="fixed z-50 glass-card px-3 py-2 text-xs pointer-events-none"
           style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
         >
-          <div className="font-semibold text-white">{formatCategoryName(tooltip.name)}</div>
+          <div className="font-semibold text-white">{formatIntentCompact(tooltip.name, intentHierarchy)}</div>
           <div className="text-slate-400">Count: {tooltip.count}</div>
           <div className="text-slate-400">{tooltip.percentage}%</div>
         </div>
