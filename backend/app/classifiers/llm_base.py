@@ -140,10 +140,22 @@ class LLMBaseClassifier(BaseClassifier):
 
         with self._client_lock:
             if self._client is None:
-                kwargs = {"api_key": self._get_api_key()}
+                import httpx
+
+                ck = {"api_key": self._get_api_key()}
                 if self.base_url:
-                    kwargs["base_url"] = self.base_url
-                self._client = openai.OpenAI(**kwargs)
+                    ck["base_url"] = self.base_url
+                # Use a generous connection pool and timeout so long-running
+                # classification jobs don't exhaust the pool on constrained VMs.
+                ck["http_client"] = httpx.Client(
+                    limits=httpx.Limits(
+                        max_connections=40,
+                        max_keepalive_connections=20,
+                        keepalive_expiry=120,
+                    ),
+                    timeout=httpx.Timeout(120.0, pool=120.0),
+                )
+                self._client = openai.OpenAI(**ck)
 
         effective_model = model or self.model
 
@@ -153,7 +165,7 @@ class LLMBaseClassifier(BaseClassifier):
                     "model": effective_model,
                     "messages": messages,
                     "temperature": self.temperature,
-                    "timeout": 60,
+                    "timeout": 120,
                 }
                 try:
                     kwargs["max_completion_tokens"] = self.max_tokens
@@ -193,10 +205,20 @@ class LLMBaseClassifier(BaseClassifier):
 
         with self._client_lock:
             if self._client is None:
-                kwargs = {"api_key": self._get_api_key()}
+                import httpx
+
+                ck = {"api_key": self._get_api_key()}
                 if self.base_url:
-                    kwargs["base_url"] = self.base_url
-                self._client = anthropic.Anthropic(**kwargs)
+                    ck["base_url"] = self.base_url
+                ck["http_client"] = httpx.Client(
+                    limits=httpx.Limits(
+                        max_connections=40,
+                        max_keepalive_connections=20,
+                        keepalive_expiry=120,
+                    ),
+                    timeout=httpx.Timeout(120.0, pool=120.0),
+                )
+                self._client = anthropic.Anthropic(**ck)
 
         system_content = ""
         chat_messages = []
@@ -214,7 +236,7 @@ class LLMBaseClassifier(BaseClassifier):
                     messages=chat_messages,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
-                    timeout=60,
+                    timeout=120,
                 )
                 return response.content[0].text.strip()
             except ClassifierConfigError:
