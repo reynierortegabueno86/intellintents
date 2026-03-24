@@ -23,6 +23,27 @@ export function formatCategoryName(name) {
 }
 
 /**
+ * Generate a 3-letter uppercase code from a category name.
+ *
+ *   ONBOARDING_KYC      → "ONK"
+ *   INVESTOR_PROFILING   → "INP"
+ *   PRODUCT_DISCOVERY    → "PRD"
+ *   COMPLAINT            → "COM"
+ *   GREETING             → "GRE"
+ */
+export function getCategoryCode(name) {
+  if (!name) return '';
+  const words = name.replace(/_/g, ' ').trim().split(/\s+/);
+  if (words.length >= 3) {
+    return (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+  }
+  if (words.length === 2) {
+    return (words[0].slice(0, 2) + words[1][0]).toUpperCase();
+  }
+  return words[0].slice(0, 3).toUpperCase();
+}
+
+/**
  * Convert user input to DB storage format.
  *   "Open Account" → "OPEN_ACCOUNT" (root) or "open_account" (child)
  */
