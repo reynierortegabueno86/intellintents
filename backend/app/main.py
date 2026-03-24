@@ -32,7 +32,7 @@ from app.models.models import (
     Turn,
 )
 from app.models.models import Run
-from app.routers import analytics, classification, datasets, experiments, taxonomy
+from app.routers import analytics, datasets, experiments, taxonomy
 from app.classifiers.rule_based import RuleBasedClassifier
 
 _logger = logging.getLogger(__name__)
@@ -185,7 +185,6 @@ from fastapi import APIRouter as _APIRouter
 _api_router = _APIRouter(prefix="/api")
 _api_router.include_router(datasets.router)
 _api_router.include_router(taxonomy.router)
-_api_router.include_router(classification.router)
 _api_router.include_router(analytics.router)
 _api_router.include_router(experiments.router)
 

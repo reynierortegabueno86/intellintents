@@ -59,10 +59,8 @@ export const importTaxonomyFromSource = (source) =>
   request('/taxonomies/import-source', { method: 'POST', body: JSON.stringify({ source }) });
 export const exportTaxonomy = (id) => request(`/taxonomies/${id}/export`);
 
-// Classification
-export const classify = (data) => request('/classify', { method: 'POST', body: JSON.stringify(data) });
-export const getClassifyMethods = () => request('/classify/methods');
-export const getClassifyResults = (datasetId, taxonomyId) => request(`/classify/results/${datasetId}/${taxonomyId}`);
+// Classification methods (served by experiments router)
+export const getClassifyMethods = () => request('/experiments/methods');
 
 // Analytics
 export const getAnalyticsSummary = (datasetId) => request(`/analytics/summary/${datasetId}`);
