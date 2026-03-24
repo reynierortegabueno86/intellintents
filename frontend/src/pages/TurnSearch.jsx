@@ -394,8 +394,12 @@ export default function TurnSearch() {
               {/* Intent label multi-select — grouped by parent category */}
               {filterOptions.intent_labels.length > 0 && (() => {
                 const { groups, standalone } = groupIntentsByParent(filterOptions.intent_labels, intentHierarchy);
-                const parentNames = Object.keys(groups).sort();
-                const hasGroups = parentNames.length > 0;
+                // Merge standalone labels into groups as single-item categories
+                const allGroups = { ...groups };
+                for (const label of standalone) {
+                  allGroups[label] = [label];
+                }
+                const parentNames = Object.keys(allGroups).sort();
 
                 return (
                   <div>
@@ -406,9 +410,9 @@ export default function TurnSearch() {
                       )}
                     </label>
                     <div className="bg-slate-800/40 rounded-lg p-2 max-h-48 overflow-y-auto space-y-1">
-                      {/* Grouped categories */}
                       {parentNames.map(parent => {
-                        const children = groups[parent];
+                        const children = allGroups[parent];
+                        const isSingleItem = children.length === 1 && children[0] === parent;
                         const isExpanded = !!expandedGroups[parent];
                         const selectedCount = children.filter(c => selectedIntents.includes(c)).length;
                         const allSelected = selectedCount === children.length;
@@ -423,6 +427,38 @@ export default function TurnSearch() {
                             setSelectedIntents(prev => [...new Set([...prev, ...children])]);
                           }
                         };
+
+                        // Single-item categories: render as a simple toggle row
+                        if (isSingleItem) {
+                          const isSelected = selectedIntents.includes(parent);
+                          return (
+                            <div key={parent} className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => toggleIntent(parent)}
+                                className="text-slate-500 flex-shrink-0"
+                                style={{ width: 12 }}
+                              />
+                              <button
+                                onClick={() => toggleIntent(parent)}
+                                className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 transition-colors"
+                                style={{
+                                  borderColor: isSelected ? color : 'rgb(51 65 85 / 0.5)',
+                                  backgroundColor: isSelected ? color : 'transparent',
+                                }}
+                              >
+                                {isSelected && <Check size={10} className="text-slate-900" />}
+                              </button>
+                              <button
+                                onClick={() => toggleIntent(parent)}
+                                className={`flex items-center gap-1.5 text-[11px] transition-opacity ${isSelected ? 'opacity-100' : 'opacity-50 hover:opacity-75'}`}
+                                style={{ color }}
+                              >
+                                <span className="font-mono font-bold text-[9px] opacity-70">{code}</span>
+                                <span>{formatCategoryName(parent)}</span>
+                              </button>
+                            </div>
+                          );
+                        }
 
                         return (
                           <div key={parent}>
@@ -481,33 +517,6 @@ export default function TurnSearch() {
                                 })}
                               </div>
                             )}
-                          </div>
-                        );
-                      })}
-                      {/* Standalone labels (no parent) — shown as single-row toggles in same style */}
-                      {standalone.map(intent => {
-                        const isSelected = selectedIntents.includes(intent);
-                        const color = getIntentColor(intent);
-                        return (
-                          <div key={intent} className="flex items-center gap-1.5">
-                            <div className="w-3 flex-shrink-0" />
-                            <button
-                              onClick={() => toggleIntent(intent)}
-                              className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 transition-colors"
-                              style={{
-                                borderColor: isSelected ? color : 'rgb(51 65 85 / 0.5)',
-                                backgroundColor: isSelected ? color : 'transparent',
-                              }}
-                            >
-                              {isSelected && <Check size={10} className="text-slate-900" />}
-                            </button>
-                            <button
-                              onClick={() => toggleIntent(intent)}
-                              className={`text-[11px] transition-opacity ${isSelected ? 'opacity-100' : 'opacity-50 hover:opacity-75'}`}
-                              style={{ color }}
-                            >
-                              {formatCategoryName(intent)}
-                            </button>
                           </div>
                         );
                       })}

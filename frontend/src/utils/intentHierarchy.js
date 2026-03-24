@@ -74,5 +74,8 @@ export function groupIntentsByParent(intentLabels, hierarchy) {
     groups[parent].sort();
   }
 
-  return { groups, standalone };
+  // Remove labels from standalone that are already group headers
+  const filtered = standalone.filter(label => !groups[label]);
+
+  return { groups, standalone: filtered };
 }
