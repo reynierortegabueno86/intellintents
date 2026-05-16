@@ -177,9 +177,9 @@ async function build() {
           "Corpus español-ES, firma de inversión real",
           "Taxonomía FII v1 · 87 leaf intents",
           "Schema: Dataset → Conversation → Turn → Classification",
-          "Distribución: bucket privado NDA (no público)",
+          "Custodia: solo local · no nube · no compartido",
         ],
-        status: "Existe · pendiente datasheet + manifest",
+        status: "Existe · custodia única en workstation del lead",
       },
       {
         code: "D2",
@@ -298,7 +298,7 @@ async function build() {
     });
 
     // Footer note
-    s.addText("Distribución del dataset: solo bajo NDA — confirmado por sponsor (16-may-2026)", {
+    s.addText("Política de custodia: el dataset permanece local en la workstation del project lead — no commit, no cloud, no shared (16-may-2026)", {
       x: 0.6, y: 7.15, w: 12.0, h: 0.3,
       fontFace: BODY_FONT, fontSize: 10, italic: true, color: SLATE_LIGHT, margin: 0,
     });
@@ -504,7 +504,7 @@ async function build() {
     });
 
     const risks = [
-      { label: "PII / GDPR breach", level: "Crítico", mit: "Bucket privado NDA · redacción · datasheet explícito", color: CORAL },
+      { label: "PII / GDPR breach", level: "Crítico", mit: "Custodia local exclusiva · sin sync cloud · política firmada", color: CORAL },
       { label: "gpt-5.2 deprecation", level: "Alto", mit: "LLM cache SQLite congela respuestas del run 4", color: AMBER },
       { label: "Discrepancia 11/14 cat.", level: "Medio", mit: "Issue dedicado en S4 — reconciliación docs", color: TEAL },
       { label: "Reporte sin firma legal", level: "Crítico", mit: "Versionado v0.9 draft → v1.0 firmado", color: CORAL },
@@ -558,7 +558,7 @@ async function build() {
       { n: "01", t: "Endurecer .gitignore", d: "Excluir *.jsonl, full_classified_*.json, run_export.json, llm_cache.db*, backend/intellintents.db." },
       { n: "02", t: "Commit de los untracked críticos", d: "docs/, scripts (analyze_databases.py, export_*.py, import_run.py, build_*.js), IntellIntents_Resumen.pptx." },
       { n: "03", t: "Push y abrir PR a main", d: "“Deliverable v1: docs, scripts, executive deck”. Pasa CI + revisión Compliance lead." },
-      { n: "04", t: "Aprobar bucket NDA", d: "Legal confirma acceso al corpus completo + hashes SHA-256 del manifest." },
+      { n: "04", t: "Firmar política de custodia", d: "Legal/DPO valida docs/dataset-storage-policy.md · checklist §5 ejecutado en la workstation." },
       { n: "05", t: "Tag v1.0.0-rc1 + Steering", d: "Distribuir este deck. Comprometer fecha de v1.0.0 GA al final de S4." },
     ];
 
@@ -600,7 +600,7 @@ async function build() {
       ["Rama", "feature/hierarchical-intent-display", ICE, "ACTIVA"],
       ["Tracked", "103 archivos", ICE, ""],
       ["Untracked críticos", "docs/ · 6 scripts · PPTX", AMBER, "POR COMMIT"],
-      ["Dataset JSON", "1.4 GB → bucket NDA", CORAL, "EXCLUIDOS"],
+      ["Dataset", "3.4 GB · solo local", CORAL, "NO COMMIT"],
     ];
     gitRows.forEach((r, i) => {
       const ry = gY + 1.05 + i * 0.62;
