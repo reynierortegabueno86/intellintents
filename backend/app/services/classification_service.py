@@ -1,6 +1,5 @@
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
-from app.classifiers.base import ClassifierConfigError
 from app.classifiers.base import BaseClassifier
 from app.classifiers.rule_based import RuleBasedClassifier
 from app.classifiers.embedding_classifier import EmbeddingSimilarityClassifier

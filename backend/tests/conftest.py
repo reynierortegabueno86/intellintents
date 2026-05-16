@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -21,6 +23,17 @@ async def setup_db():
     set_session_factory(TestSessionLocal)
     yield
     set_session_factory(None)
+
+    # Cancel any pending asyncio tasks spawned by handlers under test
+    # (e.g. experiments router fires asyncio.create_task for background runs).
+    # Without this, pending tasks survive teardown and may hang the loop.
+    current = asyncio.current_task()
+    pending = [t for t in asyncio.all_tasks() if t is not current and not t.done()]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

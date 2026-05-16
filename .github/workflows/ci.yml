@@ -31,6 +31,7 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short \
             --junitxml=junit-results.xml \
+            --timeout=30 --timeout-method=thread \
             -x
 
       - name: Upload test results

@@ -252,107 +252,12 @@ async def test_upload_invalid_csv(client):
 
 
 # ---------------------------------------------------------------------------
-# Classification
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_classify_rule_based(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    resp = await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "rule_based",
-    })
-    assert resp.status_code == 200
-    assert len(resp.json()) == 4  # 4 turns
-
-
-@pytest.mark.asyncio
-async def test_classify_embedding(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    resp = await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "embedding",
-    })
-    assert resp.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_classify_hybrid(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    resp = await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "hybrid",
-    })
-    assert resp.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_classify_invalid_method(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    resp = await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "nonexistent",
-    })
-    assert resp.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_classify_invalid_dataset(client):
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    resp = await client.post("/classify", json={
-        "dataset_id": 9999,
-        "taxonomy_id": tax["id"],
-        "method": "rule_based",
-    })
-    assert resp.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_classification_methods(client):
-    resp = await client.get("/classify/methods")
-    assert resp.status_code == 200
-    methods = resp.json()
-    method_ids = [m["id"] for m in methods]
-    assert "rule_based" in method_ids
-    assert "embedding" in method_ids
-    assert "zero_shot" in method_ids
-    assert "hybrid" in method_ids
-    assert "transformer" in method_ids
-    assert "llm_fewshot" in method_ids
-
-
-@pytest.mark.asyncio
-async def test_classification_results(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "rule_based",
-    })
-    resp = await client.get(f"/classify/results/{ds['id']}/{tax['id']}")
-    assert resp.status_code == 200
-    results = resp.json()
-    assert len(results) == 2  # 2 conversations
-
-
-# ---------------------------------------------------------------------------
 # Analytics
 # ---------------------------------------------------------------------------
+# The /classify endpoint was removed in commit 3e26b30 ("Remove Classification
+# module, keep Experiments as the single entry point"). Distribution and
+# transition analytics are covered end-to-end at service level in
+# test_analytics_service.py with proper DB-level fixtures.
 
 @pytest.mark.asyncio
 async def test_analytics_summary(client):
@@ -362,35 +267,6 @@ async def test_analytics_summary(client):
     body = resp.json()
     assert body["total_conversations"] == 2
     assert body["total_turns"] == 4
-
-
-@pytest.mark.asyncio
-async def test_analytics_distribution(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "rule_based",
-    })
-    resp = await client.get(f"/analytics/distribution/{ds['id']}/{tax['id']}")
-    assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
-
-
-@pytest.mark.asyncio
-async def test_analytics_transitions(client):
-    ds = await _upload_csv(client)
-    tax = await _create_taxonomy(client)
-    await _add_categories(client, tax["id"])
-    await client.post("/classify", json={
-        "dataset_id": ds["id"],
-        "taxonomy_id": tax["id"],
-        "method": "rule_based",
-    })
-    resp = await client.get(f"/analytics/transitions/{ds['id']}/{tax['id']}")
-    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,17 @@ frontend/dist/
 # Database (local SQLite)
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
+
+# Large dataset exports — distributed only via NDA bucket, not the repo
+*.jsonl
+full_classified_*.json
+run_export.json
+
+# Recovery / runtime artifacts
+recovery_report.txt
+backend/recovery_report.txt
 
 # Environment / Secrets
 .env
